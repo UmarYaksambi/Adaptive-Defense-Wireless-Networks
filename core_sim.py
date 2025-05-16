@@ -4,505 +4,379 @@ import numpy as np
 import random
 import math
 
-# --- Constants (moved from NetSim.py or defined here) ---
-ATTACKER_STRATEGIES_DEFAULT = ["broadband", "sweep", "reactive", "targeted", "power_burst", "intelligent"]
-DEFENDER_STRATEGIES_DEFAULT = ["hop", "detect_and_switch", "stay", "spread_spectrum", "error_coding", "cooperative"]
+# --- Constants ---
+# 🔹 Step 1: Optimize Attacker Strategy Logic (Add new strategies)
+ATTACKER_STRATEGIES_DEFAULT = [
+    "broadband", "sweep", "reactive", "targeted", "power_burst", "intelligent",
+    "reactive_strong", "central_node_targeting" # New strategies
+]
+DEFENDER_STRATEGIES_DEFAULT = [
+    "hop", "detect_and_switch", "stay", "spread_spectrum", "error_coding", "cooperative"
+]
 
+# 🔹 Step 1: Lower cost for new attackers
 ATTACK_COST = {
     "broadband": 5.0, "sweep": 3.0, "reactive": 2.5, "targeted": 2.0, "power_burst": 4.0, "intelligent": 1.5,
-    "default": 1.0 # Default cost for unknown strategies
+    "reactive_strong": 2.5, # New
+    "central_node_targeting": 2.0, # New
+    "default": 1.0
 }
 DEFENSE_COST = {
     "hop": 2.0, "detect_and_switch": 1.5, "stay": 0.2, "spread_spectrum": 3.0, "error_coding": 2.5, "cooperative": 1.0,
-    "default": 0.5 # Default cost for unknown strategies
+    "default": 0.5
 }
 
-# --- Core Simulation Functions ---
+# --- Helper Functions for State Representation (🔹 Step 3: Enhance Q-Learning State) ---
+def get_health_bucket(network_health):
+    if network_health < 0.33: return "low"
+    if network_health < 0.66: return "medium"
+    return "high"
+
+def get_jammed_freqs_bucket(jammed_freq_count, total_freqs):
+    if total_freqs == 0: return "none" # Avoid division by zero
+    if jammed_freq_count == 0: return "none"
+    if jammed_freq_count <= total_freqs * 0.4: return "few"
+    return "many"
+
+def get_step_phase(step_num, total_steps):
+    if total_steps == 0: return "early" # Avoid division by zero
+    if step_num < total_steps / 3: return "early"
+    if step_num < 2 * total_steps / 3: return "mid"
+    return "late"
+
+def get_most_common_defense(history_def_strat, window=5):
+    """Determines the most common defense strategy in the recent history."""
+    if not history_def_strat or len(history_def_strat) < window:
+        return "None" # Not enough history or no history
+    recent_defenses = history_def_strat[-window:]
+    if not recent_defenses: return "None"
+    counts = {d: recent_defenses.count(d) for d in set(recent_defenses)}
+    return max(counts, key=counts.get) if counts else "None"
+
+
+def get_q_learning_state(history, current_step_num, total_simulation_steps, num_frequencies,
+                         last_atk_strat_for_state, last_def_strat_for_state, # These are from PREVIOUS step's actions
+                         last_jammed_count_for_state, last_net_health_for_state): # These are outcomes of PREVIOUS step
+    """
+    🔹 Step 3: Enhanced Q-Learning State Representation
+    Includes: last_defense_used, most_common_defense (recent), jammed_bucket, step_phase, network_health_bucket
+    """
+    health_bucket = get_health_bucket(last_net_health_for_state)
+    step_phase = get_step_phase(current_step_num, total_simulation_steps)
+    jammed_bucket = get_jammed_freqs_bucket(last_jammed_count_for_state, num_frequencies)
+    
+    # last_def_strat_for_state is effectively 'last_defense_used' for the state leading to current decision
+    most_common_def_hist = get_most_common_defense(history.get("def_strat", []), window=5) # Use actual history dict
+
+    state_tuple_elements = (
+        health_bucket,
+        str(last_def_strat_for_state), # Last defense action taken by self (for defender) or observed (for attacker)
+        str(most_common_def_hist),    # Defender's recent trend
+        jammed_bucket,
+        step_phase,
+        # Could also add last_atk_strat_for_state if useful for defender's state
+        # str(last_atk_strat_for_state)
+    )
+    return state_tuple_elements
+
+
+# --- Core Simulation Functions (Modified) ---
 
 def generate_network(topology_type, n_nodes, connect_param, frequencies_list, seed=None):
-    """
-    Generates a network graph based on specified topology.
-    Nodes are initialized with a frequency and 'idle' status.
-    """
-    if seed is not None:
-        random.seed(seed)
-        np.random.seed(seed)
-
-    G = nx.Graph()
-    G.add_nodes_from(range(n_nodes))
-
-    # Assign initial attributes to nodes
+    # ... (no changes from previous version) ...
+    if seed is not None: random.seed(seed); np.random.seed(seed)
+    G = nx.Graph(); G.add_nodes_from(range(n_nodes))
     for i in range(n_nodes):
-        G.nodes[i]['frequency'] = random.choice(frequencies_list)
-        G.nodes[i]['status'] = 'idle' # 'idle', 'ok', 'jammed', 'resistant'
-        G.nodes[i]['type'] = 'normal' # For potential future use (e.g., 'sensor', 'actuator')
-        G.nodes[i]['coalition'] = None # For coalition game model
-
-    if topology_type == "Random (Erdős–Rényi)":
-        G = nx.erdos_renyi_graph(n_nodes, connect_param, seed=seed)
-    elif topology_type == "Star":
-        G = nx.star_graph(n_nodes -1) # nx.star_graph(n) creates a graph with n+1 nodes.
-        if n_nodes == 1: G = nx.Graph(); G.add_node(0) # Handle case of 1 node
-    elif topology_type == "Ring":
-        G = nx.cycle_graph(n_nodes)
+        G.nodes[i]['frequency'] = random.choice(frequencies_list) if frequencies_list else 1
+        G.nodes[i]['status'] = 'idle'; G.nodes[i]['type'] = 'normal'; G.nodes[i]['coalition'] = None
+    if topology_type == "Random (Erdős–Rényi)": G = nx.erdos_renyi_graph(n_nodes, connect_param, seed=seed)
+    elif topology_type == "Star": G = nx.star_graph(n_nodes -1);
+    elif topology_type == "Ring": G = nx.cycle_graph(n_nodes)
     elif topology_type == "Small-World":
-        # For small-world, connect_param can be tuple (k, p)
-        # k = Each node is joined to k nearest neighbors in ring topology
-        # p = The probability of rewiring each edge
-        k = int(connect_param) if isinstance(connect_param, (int, float)) else 4 # Default k
-        p_rewire = 0.1 # Default p_rewire
-        if isinstance(connect_param, tuple) and len(connect_param) == 2:
-            k = connect_param[0]
-            p_rewire = connect_param[1]
+        k = int(connect_param[0]) if isinstance(connect_param, tuple) else int(connect_param)
+        p_rewire = connect_param[1] if isinstance(connect_param, tuple) else 0.1
         G = nx.watts_strogatz_graph(n_nodes, k, p_rewire, seed=seed)
-    elif topology_type == "Fully Connected":
-        G = nx.complete_graph(n_nodes)
-    else:
-        # Default to Erdos-Renyi if unknown
-        G = nx.erdos_renyi_graph(n_nodes, connect_param, seed=seed)
-
-    # Re-assign attributes if graph generation overwrote them (some nx functions return new graph)
-    for i in G.nodes(): # Iterate over actual nodes in G
-        G.nodes[i]['frequency'] = random.choice(frequencies_list)
-        G.nodes[i]['status'] = 'idle'
-        G.nodes[i]['type'] = 'normal'
-        G.nodes[i]['coalition'] = None
-
+    elif topology_type == "Fully Connected": G = nx.complete_graph(n_nodes)
+    else: G = nx.erdos_renyi_graph(n_nodes, connect_param, seed=seed)
+    for i in G.nodes(): # Ensure attributes exist after graph recreation
+        if 'frequency' not in G.nodes[i]: G.nodes[i]['frequency'] = random.choice(frequencies_list) if frequencies_list else 1
+        if 'status' not in G.nodes[i]: G.nodes[i]['status'] = 'idle'
+        if 'type' not in G.nodes[i]: G.nodes[i]['type'] = 'normal'
+        if 'coalition' not in G.nodes[i]: G.nodes[i]['coalition'] = None
+    if n_nodes == 1 and not G.nodes(): G.add_node(0); G.nodes[0]['frequency']=random.choice(frequencies_list) if frequencies_list else 1; G.nodes[0]['status']='idle' # Handle single node case fully
     return G
 
-def payoff(attacker_strat, defender_strat, network, success_count, jammed_nodes_list, protected_nodes_list, detection_prob):
-    """
-    Calculates payoffs for attacker and defender.
-    Returns: atk_cost, def_cost, atk_reward, def_reward, detected_this_step
-    """
+def payoff(attacker_strat, defender_strat, network, success_count, jammed_nodes_list, protected_nodes_list, detection_prob,
+           current_net_health, prev_net_health, max_nodes, history): # 🔹 Step 2: Modify Payoff Function
     atk_cost = ATTACK_COST.get(attacker_strat, ATTACK_COST["default"])
     def_cost = DEFENSE_COST.get(defender_strat, DEFENSE_COST["default"])
-
-    num_nodes = len(network.nodes)
+    num_nodes = len(network.nodes) if network else 0 # Handle empty network
     
-    # Basic reward structure:
-    # Attacker: Reward for jammed nodes, penalized for cost and detection
-    # Defender: Reward for protected nodes (non-jammed), penalized for cost
-    
-    # Example: Attacker reward proportional to % of jammed nodes
     atk_base_reward = (len(jammed_nodes_list) / num_nodes) * 10 if num_nodes > 0 else 0
-    
-    # Example: Defender reward proportional to % of protected nodes
     def_base_reward = (len(protected_nodes_list) / num_nodes) * 10 if num_nodes > 0 else 0
-
-    detected_this_step = random.random() < detection_prob
     
-    detection_penalty_attacker = 5.0 if detected_this_step else 0.0 # Penalty if detected
+    detected_this_step = random.random() < detection_prob
+    detection_penalty_attacker = 5.0 if detected_this_step else 0.0 # Attacker cost penalty already removed, this is direct reward penalty
 
-    # Modify rewards based on specific strategies or game dynamics
-    if attacker_strat == "intelligent" and defender_strat == "cooperative":
-        # Example: Intelligent attacker might get higher reward if successful against cooperative defense
-        # Or cooperative defense might mitigate intelligent attack better
-        pass # Add specific logic if needed
-
+    # Initial payoffs before shaping
     atk_reward = atk_base_reward - atk_cost - detection_penalty_attacker
     def_reward = def_base_reward - def_cost
 
+    # --- Defender Payoff Shaping ---
+    # Penalty for repeating same defense 3+ times
+    if history and len(history.get("def_strat", [])) >= 3:
+        hist_def = history["def_strat"]
+        if hist_def[-1] == hist_def[-2] == hist_def[-3] and hist_def[-1] == defender_strat : # Current action makes it 3 in a row
+            def_reward -= 1.5  # Penalty for being static/predictable
+            atk_reward += 1.0  # Attacker bonus for exploiting predictability
+
+    # Bonus if network health improves
+    if current_net_health > prev_net_health:
+        def_reward += (current_net_health - prev_net_health) * 2.0
+    # Penalty if network health drops (already implicitly handled by base reward, but can emphasize)
+    # elif current_net_health < prev_net_health:
+    #     def_reward += (current_net_health - prev_net_health) * 1.0 # Negative value, so a penalty
+
+    # Penalize heavy jamming events
+    jam_threshold_ratio = 0.75
+    if num_nodes > 0 and (len(jammed_nodes_list) / num_nodes) > jam_threshold_ratio:
+        def_reward -= 2.5 # Stronger penalty for defender if >75% nodes jammed
+        atk_reward += 1.5 # Bonus for attacker achieving this
+
+    # --- Attacker Payoff Shaping ---
+    # Attacker costs are generally lower now via ATTACK_COST dictionary.
+    # Specific bonuses already added (e.g., when defender is predictable, high jamming success).
+
     return atk_cost, def_cost, atk_reward, def_reward, detected_this_step
 
-def execute_attack(strategy, network, defender_strategy, frequencies_list):
-    """
-    Simulates an attack, returns set of jammed frequencies, (placeholder for count), and detection probability.
-    """
+def execute_attack(strategy, network, defender_strategy, frequencies_list): # 🔹 Step 1: Update execute_attack
     jammed_freqs_set = set()
-    # Placeholder: detection probability can depend on attacker/defender strategy match
-    detection_prob = 0.1 # Base detection prob
+    detection_prob = 0.1
+    num_nodes = network.number_of_nodes()
 
     if strategy == "broadband":
-        jammed_freqs_set = set(random.sample(frequencies_list, k=min(len(frequencies_list), 3))) # Jam 3 random freqs or all if less than 3
+        jammed_freqs_set = set(random.sample(frequencies_list, k=min(len(frequencies_list), 3))) if frequencies_list else set()
         detection_prob = 0.5
     elif strategy == "sweep":
-        # Sweeps through frequencies, might jam one or two at a time
-        jammed_freqs_set.add(random.choice(frequencies_list))
+        if frequencies_list: jammed_freqs_set.add(random.choice(frequencies_list))
         detection_prob = 0.3
-    elif strategy == "reactive":
-        # Tries to identify active frequencies and jam them. For simplicity, jam a common one.
-        if network.nodes:
-            freq_counts = np.unique([d['frequency'] for _, d in network.nodes(data=True)], return_counts=True)
+    elif strategy == "reactive": # Original reactive
+        if num_nodes > 0:
+            freq_counts = np.unique([d.get('frequency', frequencies_list[0] if frequencies_list else 1) for _, d in network.nodes(data=True)], return_counts=True)
             if len(freq_counts[0]) > 0:
-                most_common_freq = freq_counts[0][np.argmax(freq_counts[1])]
-                jammed_freqs_set.add(most_common_freq)
+                jammed_freqs_set.add(freq_counts[0][np.argmax(freq_counts[1])])
         detection_prob = 0.2
     elif strategy == "targeted":
-        # Targets a specific, known frequency (e.g., most critical one)
-        if frequencies_list:
-            jammed_freqs_set.add(frequencies_list[0]) # Example: target the first frequency
+        if frequencies_list: jammed_freqs_set.add(frequencies_list[0])
         detection_prob = 0.15
     elif strategy == "power_burst":
-        # Jams a single frequency with high power, harder to overcome
-        if frequencies_list:
-            jammed_freqs_set.add(random.choice(frequencies_list))
-        detection_prob = 0.4 # Higher power might be more detectable
-    elif strategy == "intelligent":
-        # More sophisticated, adapts. For now, similar to reactive but perhaps more effective.
-        if network.nodes:
-            freq_counts = np.unique([d['frequency'] for _, d in network.nodes(data=True)], return_counts=True)
+        if frequencies_list: jammed_freqs_set.add(random.choice(frequencies_list))
+        detection_prob = 0.4
+    elif strategy == "intelligent": # Can be enhanced later
+        if num_nodes > 0:
+            freq_counts = np.unique([d.get('frequency', frequencies_list[0] if frequencies_list else 1) for _, d in network.nodes(data=True)], return_counts=True)
             if len(freq_counts[0]) > 0:
-                most_common_freq = freq_counts[0][np.argmax(freq_counts[1])]
-                jammed_freqs_set.add(most_common_freq)
-        detection_prob = 0.25 # Intelligent might be stealthier or more obvious
-    else: # Default fallback
-        if frequencies_list:
-            jammed_freqs_set.add(random.choice(frequencies_list))
+                jammed_freqs_set.add(freq_counts[0][np.argmax(freq_counts[1])])
+        detection_prob = 0.25
+    # --- New Attacker Strategies ---
+    elif strategy == "reactive_strong":
+        if num_nodes > 0:
+            active_freqs = set([d.get('frequency', frequencies_list[0] if frequencies_list else 1) for _, d in network.nodes(data=True) if d.get('status') != 'jammed']) # Jam non-jammed nodes' freqs
+            jammed_freqs_set.update(active_freqs)
+        detection_prob = 0.4
+    elif strategy == "central_node_targeting":
+        if num_nodes > 0:
+            degrees = list(network.degree())
+            if degrees: # Ensure network has edges/degrees calculated
+                central_node_id = max(degrees, key=lambda x: x[1])[0]
+                freq_to_jam = network.nodes[central_node_id].get('frequency', frequencies_list[0] if frequencies_list else 1)
+                jammed_freqs_set.add(freq_to_jam)
+            elif frequencies_list: # Fallback if no clear central node (e.g., isolated nodes)
+                jammed_freqs_set.add(random.choice(frequencies_list))
+        detection_prob = 0.35
+    else:
+        if frequencies_list: jammed_freqs_set.add(random.choice(frequencies_list))
+        
+    return jammed_freqs_set, len(jammed_freqs_set), detection_prob
 
-    # Placeholder for the second return value (e.g., number of attack signals sent)
-    _placeholder_value = len(jammed_freqs_set) 
-    
-    return jammed_freqs_set, _placeholder_value, detection_prob
 
 def execute_defense(strategy, network, jammed_freqs_set, frequencies_list):
-    """
-    Simulates defense actions, updates node frequencies/status in the network.
-    Returns the modified network.
-    """
-    available_frequencies = [f for f in frequencies_list if f not in jammed_freqs_set]
-    
+    # ... (no changes from previous version) ...
+    available_frequencies = [f for f in frequencies_list if f not in jammed_freqs_set] if frequencies_list else []
     for node_id in network.nodes:
-        current_freq = network.nodes[node_id]['frequency']
-        
+        current_freq = network.nodes[node_id].get('frequency', frequencies_list[0] if frequencies_list else 1)
+        new_freq = current_freq
         if strategy == "hop":
-            if current_freq in jammed_freqs_set and available_frequencies:
-                network.nodes[node_id]['frequency'] = random.choice(available_frequencies)
-        elif strategy == "detect_and_switch":
-            # Assumes detection happens (simplified here)
-            if current_freq in jammed_freqs_set and available_frequencies:
-                network.nodes[node_id]['frequency'] = random.choice(available_frequencies)
-            # Could add a small chance of staying if switch is costly/unavailable
-        elif strategy == "stay":
-            pass # No change in frequency
-        elif strategy == "spread_spectrum":
-            # Nodes using spread spectrum are harder to jam unless all sub-channels are hit.
-            # This logic is partly handled in the outcome evaluation in simulate()
-            pass
-        elif strategy == "error_coding":
-            # Error coding helps tolerate some level of interference.
-            # This logic is partly handled in the outcome evaluation in simulate()
-            pass
+            if current_freq in jammed_freqs_set and available_frequencies: new_freq = random.choice(available_frequencies)
+        elif strategy == "detect_and_switch": # Simplified
+            if current_freq in jammed_freqs_set and available_frequencies: new_freq = random.choice(available_frequencies)
+        elif strategy == "stay": pass
+        elif strategy == "spread_spectrum" or strategy == "error_coding": pass # Resistance handled in outcome eval
         elif strategy == "cooperative":
-            # Nodes might share info about clear channels or help relay.
-            # Simplified: if jammed, try to move to a frequency a neighbor is successfully using.
             if current_freq in jammed_freqs_set and available_frequencies:
-                # Find a safe frequency from a neighbor (if any)
                 safe_neighbor_freq = None
                 for neighbor in network.neighbors(node_id):
-                    neighbor_freq = network.nodes[neighbor]['frequency']
-                    if neighbor_freq not in jammed_freqs_set:
-                        safe_neighbor_freq = neighbor_freq
-                        break
-                if safe_neighbor_freq:
-                    network.nodes[node_id]['frequency'] = safe_neighbor_freq
-                elif available_frequencies: # Else, pick a random available one
-                    network.nodes[node_id]['frequency'] = random.choice(available_frequencies)
-        else: # Default fallback
-            if current_freq in jammed_freqs_set and available_frequencies:
-                 network.nodes[node_id]['frequency'] = random.choice(available_frequencies)
-
+                    neighbor_freq = network.nodes[neighbor].get('frequency')
+                    if neighbor_freq and neighbor_freq not in jammed_freqs_set: safe_neighbor_freq = neighbor_freq; break
+                if safe_neighbor_freq: new_freq = safe_neighbor_freq
+                elif available_frequencies: new_freq = random.choice(available_frequencies)
+        else: # Default behavior
+            if current_freq in jammed_freqs_set and available_frequencies: new_freq = random.choice(available_frequencies)
+        network.nodes[node_id]['frequency'] = new_freq
     return network
 
-def initialize_learning_models(game_model, attacker_strategies, defender_strategies, force_reset=False, alpha=0.1, gamma=0.9, epsilon=0.2):
-    """
-    Initializes and returns learning models (Q-tables, beliefs, etc.).
-    No longer uses st.session_state.
-    """
+def initialize_learning_models(game_model, attacker_strategies, defender_strategies,
+                               alpha=0.1, gamma=0.9,
+                               epsilon_start=0.2, epsilon_decay=0.995, epsilon_min=0.05,
+                               q_bias=None): # q_bias for potential Stackelberg init (🔹 Step 4)
     learning_models = {}
+    learning_models['alpha'] = alpha; learning_models['gamma'] = gamma
+    learning_models['epsilon_start'] = epsilon_start; learning_models['current_epsilon'] = epsilon_start
+    learning_models['epsilon_decay'] = epsilon_decay; learning_models['epsilon_min'] = epsilon_min
+    
     if game_model == "Q-Learning":
-        learning_models['q_attacker'] = {a: {d: 0.0 for d in defender_strategies} for a in attacker_strategies}
-        learning_models['q_defender'] = {d: {a: 0.0 for a in attacker_strategies} for d in defender_strategies}
-        # print("Q-Tables Initialized")
+        learning_models['q_attacker'] = {} # Stateful: Q[state_tuple][action_string]
+        learning_models['q_defender'] = {}
+        # For Stackelberg pre-initialization (conceptual for now)
+        # If q_bias is provided (e.g., derived from Stackelberg analysis for certain states/actions)
+        # This would require translating Stackelberg outcomes into Q-values for specific state-action pairs.
+        # Example: if q_bias = { (state1, action_A): 5.0, (state1, action_B): -2.0 }
+        # if q_bias:
+        #     for (state, action), value in q_bias.items():
+        #         if state not in learning_models['q_defender']: learning_models['q_defender'][state] = {}
+        #         learning_models['q_defender'][state][action] = value
+        # This is complex to generalize without knowing the Stackelberg output format.
+        # A simpler approach for bias is optimistic initialization for new states (handled in update/select).
 
     elif game_model == "Bayesian Game":
-        learning_models['attacker_belief_on_defender'] = {d: 1.0 / len(defender_strategies) for d in defender_strategies}
-        learning_models['defender_belief_on_attacker'] = {a: 1.0 / len(attacker_strategies) for a in attacker_strategies}
-        
-        # History of opponent's plays and resulting payoffs for Bayesian updates
-        learning_models['attacker_observed_defender_payoffs'] = {a: {d: [] for d in defender_strategies} for a in attacker_strategies}
-        learning_models['defender_observed_attacker_payoffs'] = {d: {a: [] for a in attacker_strategies} for d in defender_strategies}
-        # print("Bayesian Beliefs Initialized")
-        
-    elif game_model == "Static": # Example: Static game might imply fixed strategies or no learning
-        # No specific learning models needed, or could pre-define strategies
-        # For now, this will make select_strategies pick randomly if not handled explicitly
-        pass
-        
-    elif game_model == "Coalition Formation":
-        # May need specific models for coalition utility, stability, etc.
-        # For now, let basic Q-learning or Bayesian operate per agent/coalition if applicable
-        # This part would need significant expansion for true coalition logic.
-        # Let's assume for now it uses Q-learning for individual agent decisions within a coalition context.
-        learning_models['q_attacker'] = {a: {d: 0.0 for d in defender_strategies} for a in attacker_strategies}
-        learning_models['q_defender'] = {d: {a: 0.0 for a in attacker_strategies} for d in defender_strategies}
-        # print("Coalition Game (using Q-learning base) Initialized")
-
-    # Store learning parameters
-    learning_models['alpha'] = alpha
-    learning_models['gamma'] = gamma
-    learning_models['epsilon'] = epsilon
-    
+        learning_models['attacker_belief_on_defender_strategy'] = {d: 1.0 / len(defender_strategies) for d in defender_strategies}
+        learning_models['defender_belief_on_attacker_strategy'] = {a: 1.0 / len(attacker_strategies) for a in attacker_strategies}
+        learning_models['attacker_observed_defender_plays'] = {d: 0 for d in defender_strategies}
+        learning_models['defender_observed_attacker_plays'] = {a: 0 for a in attacker_strategies}
+        learning_models['avg_payoffs_attacker'] = {a: {d: 0.0 for d in defender_strategies} for a in attacker_strategies}
+        learning_models['avg_payoffs_defender'] = {d: {a: 0.0 for a in attacker_strategies} for d in defender_strategies}
+        learning_models['payoff_counts_attacker'] = {a: {d: 0 for d in defender_strategies} for a in attacker_strategies}
+        learning_models['payoff_counts_defender'] = {d: {a: 0 for a in attacker_strategies} for d in defender_strategies}
+    # Coalition formation and Stackelberg direct models would need their own init
     return learning_models
 
-def select_strategies(game_type, step, current_network, attacker_strategies, defender_strategies, history, learning_models, epsilon=0.2):
-    """
-    Selects strategies for attacker and defender based on the game model and learning.
-    Accepts learning_models and history as parameters.
-    Returns (atk_strat, def_strat)
-    """
+def select_strategies(game_model, step_num, total_simulation_steps,
+                      current_G, attacker_strategies, defender_strategies, history, learning_models,
+                      num_nodes, num_frequencies, # Passed for state creation
+                      hybrid_static_steps=0):
+    # ... (Hybrid logic, epsilon decay, and selection for Q-Learning, Bayesian, Static as in previous "enhanced" version) ...
+    # (The Q-Learning selection will now use the enhanced state from get_q_learning_state)
     atk_strat = random.choice(attacker_strategies)
     def_strat = random.choice(defender_strategies)
 
-    if game_type == "Q-Learning":
-        q_attacker = learning_models.get('q_attacker', {})
-        q_defender = learning_models.get('q_defender', {})
+    if step_num < hybrid_static_steps:
+        atk_strat = attacker_strategies[step_num % len(attacker_strategies)]
+        def_strat = defender_strategies[step_num % len(defender_strategies)]
+        return atk_strat, def_strat
 
-        # Attacker selection (epsilon-greedy)
-        if random.random() < epsilon or not q_attacker:
-            atk_strat = random.choice(attacker_strategies)
+    current_epsilon = learning_models.get('current_epsilon', learning_models['epsilon_start'])
+
+    if game_model == "Q-Learning":
+        q_attacker_table = learning_models['q_attacker']
+        q_defender_table = learning_models['q_defender']
+
+        last_atk = history['atk_strat'][-1] if history.get('atk_strat') else "None"
+        last_def = history['def_strat'][-1] if history.get('def_strat') else "None"
+        last_jam_count = history['jammed_nodes_count'][-1] if history.get('jammed_nodes_count') else 0
+        last_health = history['net_health'][-1] if history.get('net_health') else 1.0
+
+        current_state_q = get_q_learning_state(history, step_num, total_simulation_steps, num_frequencies,
+                                             last_atk, last_def, last_jam_count, last_health)
+        
+        # Attacker
+        if random.random() < current_epsilon: atk_strat = random.choice(attacker_strategies)
         else:
-            # Find best action for attacker based on its Q-table (assuming defender plays best response or based on attacker's view)
-            # This is simplified; a true Q-learner estimates value of (s,a) pair.
-            # Here, we assume the "state" is implicitly the game itself.
-            # Attacker needs to pick an action. Let's assume it picks based on max Q value against any defender strategy.
-            best_val = -float('inf')
-            best_a = atk_strat
-            for a_s in attacker_strategies:
-                # Expected Q value for attacker's action a_s, averaging over defender's possible responses
-                # weighted by defender's Q-values for those responses (complex) or just max Q(a_s, d_s)
-                current_max_q_for_a_s = max(q_attacker.get(a_s, {}).values()) if q_attacker.get(a_s) else -float('inf')
-                if current_max_q_for_a_s > best_val:
-                    best_val = current_max_q_for_a_s
-                    best_a = a_s
-            atk_strat = best_a
-            
-        # Defender selection (epsilon-greedy)
-        if random.random() < epsilon or not q_defender:
-            def_strat = random.choice(defender_strategies)
+            if current_state_q not in q_attacker_table or not q_attacker_table[current_state_q]:
+                q_attacker_table[current_state_q] = {a: 0.01 for a in attacker_strategies} # Optimistic init for new states
+            if q_attacker_table[current_state_q]: atk_strat = max(q_attacker_table[current_state_q], key=q_attacker_table[current_state_q].get)
+            else: atk_strat = random.choice(attacker_strategies)
+        # Defender
+        if random.random() < current_epsilon: def_strat = random.choice(defender_strategies)
         else:
-            best_val = -float('inf')
-            best_d = def_strat
-            for d_s in defender_strategies:
-                current_max_q_for_d_s = max(q_defender.get(d_s, {}).values()) if q_defender.get(d_s) else -float('inf')
-                if current_max_q_for_d_s > best_val:
-                    best_val = current_max_q_for_d_s
-                    best_d = d_s
-            def_strat = best_d
+            if current_state_q not in q_defender_table or not q_defender_table[current_state_q]:
+                q_defender_table[current_state_q] = {d: 0.01 for d in defender_strategies} # Optimistic init
+            if q_defender_table[current_state_q]: def_strat = max(q_defender_table[current_state_q], key=q_defender_table[current_state_q].get)
+            else: def_strat = random.choice(defender_strategies)
+        
+        new_epsilon = current_epsilon * learning_models['epsilon_decay']
+        learning_models['current_epsilon'] = max(learning_models['epsilon_min'], new_epsilon)
 
-    elif game_type == "Bayesian Game":
-        # Attacker chooses strategy to maximize expected payoff given belief about defender
-        attacker_belief_on_defender = learning_models.get('attacker_belief_on_defender', {})
-        exp_payoffs_attacker = {}
-        for atk_s in attacker_strategies:
-            exp_payoffs_attacker[atk_s] = 0
-            for def_s in defender_strategies:
-                # Need expected payoff of (atk_s, def_s) - estimate from history or a model
-                # For simplicity, use average payoff from history if available
-                payoffs = learning_models.get('attacker_observed_defender_payoffs', {}).get(atk_s, {}).get(def_s, [])
-                avg_payoff = np.mean(payoffs) if payoffs else 0 # Default to 0 if no history
-                exp_payoffs_attacker[atk_s] += attacker_belief_on_defender.get(def_s, 0) * avg_payoff
-        if exp_payoffs_attacker:
-             atk_strat = max(exp_payoffs_attacker, key=exp_payoffs_attacker.get)
-        else:
-             atk_strat = random.choice(attacker_strategies)
+    elif game_model == "Bayesian Game":
+        exp_payoffs_attacker = {atk_s: sum(learning_models['attacker_belief_on_defender_strategy'].get(def_s, 0) * learning_models['avg_payoffs_attacker'][atk_s][def_s] for def_s in defender_strategies) for atk_s in attacker_strategies}
+        if exp_payoffs_attacker: atk_strat = max(exp_payoffs_attacker, key=exp_payoffs_attacker.get)
+        
+        exp_payoffs_defender = {def_s: sum(learning_models['defender_belief_on_attacker_strategy'].get(atk_s, 0) * learning_models['avg_payoffs_defender'][def_s][atk_s] for atk_s in attacker_strategies) for def_s in defender_strategies}
+        if exp_payoffs_defender: def_strat = max(exp_payoffs_defender, key=exp_payoffs_defender.get)
 
-
-        # Defender chooses strategy to maximize expected payoff given belief about attacker
-        defender_belief_on_attacker = learning_models.get('defender_belief_on_attacker', {})
-        exp_payoffs_defender = {}
-        for def_s in defender_strategies:
-            exp_payoffs_defender[def_s] = 0
-            for atk_s in attacker_strategies:
-                payoffs = learning_models.get('defender_observed_attacker_payoffs', {}).get(def_s, {}).get(atk_s, [])
-                avg_payoff = np.mean(payoffs) if payoffs else 0
-                exp_payoffs_defender[def_s] += defender_belief_on_attacker.get(atk_s, 0) * avg_payoff
-        if exp_payoffs_defender:
-            def_strat = max(exp_payoffs_defender, key=exp_payoffs_defender.get)
-        else:
-            def_strat = random.choice(defender_strategies)
-            
-    elif game_type == "Static":
-        # Example: Predefined or random strategies if "Static" implies no learning
-        # For this placeholder, let's make attacker always choose "broadband" and defender "hop"
-        # if those strategies exist, otherwise random.
-        atk_strat = "broadband" if "broadband" in attacker_strategies else random.choice(attacker_strategies)
-        def_strat = "hop" if "hop" in defender_strategies else random.choice(defender_strategies)
-
-    elif game_type == "Coalition Formation":
-        # This is complex. If agents are Q-learners, it's similar to Q-learning.
-        # For now, let's assume it falls back to a Q-learning like selection or random.
-        # The assign_coalitions function would set up the G.nodes[id]['coalition'].
-        # Strategy selection could then be per-coalition or by representative agents.
-        # Simplified: use Q-learning logic if models are Q-type.
-        if 'q_attacker' in learning_models: # Check if Q-learning models are present
-             # Attacker selection (epsilon-greedy)
-            q_attacker = learning_models.get('q_attacker', {})
-            if random.random() < epsilon or not q_attacker:
-                atk_strat = random.choice(attacker_strategies)
-            else:
-                best_val = -float('inf')
-                best_a = random.choice(attacker_strategies)
-                for a_s in attacker_strategies:
-                    current_max_q_for_a_s = max(q_attacker.get(a_s, {}).values()) if q_attacker.get(a_s) else -float('inf')
-                    if current_max_q_for_a_s > best_val:
-                        best_val = current_max_q_for_a_s
-                        best_a = a_s
-                atk_strat = best_a
-                
-            # Defender selection (epsilon-greedy)
-            q_defender = learning_models.get('q_defender', {})
-            if random.random() < epsilon or not q_defender:
-                def_strat = random.choice(defender_strategies)
-            else:
-                best_val = -float('inf')
-                best_d = random.choice(defender_strategies)
-                for d_s in defender_strategies:
-                    current_max_q_for_d_s = max(q_defender.get(d_s, {}).values()) if q_defender.get(d_s) else -float('inf')
-                    if current_max_q_for_d_s > best_val:
-                        best_val = current_max_q_for_d_s
-                        best_d = d_s
-                def_strat = best_d
-        else: # Fallback for Coalition if no Q-models found
-            atk_strat = random.choice(attacker_strategies)
-            def_strat = random.choice(defender_strategies)
-
+    elif game_model == "Static":
+        atk_strat = attacker_strategies[0] # Could make this configurable
+        def_strat = defender_strategies[0]
+    
+    # Coalition Formation and Stackelberg would need their own detailed selection logic
+    # For Stackelberg, leader (attacker) anticipates defender's Q-learning best response.
+    # This is computationally intensive per step. Simpler to use Stackelberg outcomes to bias Q-tables.
 
     return atk_strat, def_strat
 
-def update_learning_models(game_type, atk_strat, def_strat, atk_payoff, def_payoff, learning_models, attacker_strategies, defender_strategies, alpha=0.1, gamma=0.9):
-    """
-    Updates learning models based on the outcome of a step.
-    Operates on and returns the learning_models dictionary.
-    """
-    if game_type == "Q-Learning":
-        q_attacker = learning_models.get('q_attacker')
-        q_defender = learning_models.get('q_defender')
 
-        if q_attacker is not None:
-            # Simplified Q-update: Q(s,a) = Q(s,a) + alpha * (reward + gamma * max_a' Q(s',a') - Q(s,a))
-            # Here, "state" is implicit. We update Q(atk_strat, def_strat).
-            # "Next state max Q" is tricky without explicit states. For simplicity, assume next state value is 0 for terminal or use current estimate.
-            # Or, if opponent's strategy is the "state" for the Q-value:
-            # Q_A(a, d) = Q_A(a, d) + alpha * (R_A + gamma * max_{a'} Q_A(a', d') - Q_A(a, d)) -> this is not quite right for 2-player
-            # For a zero-sum or general-sum game, each player updates their own Q-table.
-            # Q_attacker(chosen_atk_strat, chosen_def_strat)
-            old_q_atk = q_attacker.get(atk_strat, {}).get(def_strat, 0.0)
-            # Max future reward for attacker: max over defender's next possible moves from attacker's POV
-            # This can be simplified to max_a' Q(a', def_strat) if def_strat is fixed, or more complex.
-            # Simplified: no future state consideration for this basic update:
-            # Q(a,d) = (1-alpha)*Q(a,d) + alpha * (R_a)  -- this is simpler, like for multi-armed bandit
-            # Let's use the standard Q-learning update for (state, action) where state is opponent's action.
-            # Attacker updates Q_A(d_strat, atk_strat) - value of playing atk_strat when defender plays def_strat
-            
-            # Update Attacker's Q-table: Q(attacker_action, defender_action)
-            # The "state" for the attacker could be considered the defender's action.
-            # Q_A(s=def_strat, a=atk_strat)
-            # To calculate max_a' Q_A(s'=def_strat_next, a'), we'd need a model of defender's next strategy or assume it's fixed.
-            # For simplicity, let's use a common simplified update for two-player games:
-            # Q_A(atk_strat, def_strat) += alpha * (atk_payoff - Q_A(atk_strat, def_strat))
-            # This doesn't include gamma or max_future_q.
-            # A more standard approach: Q(s,a) += alpha * (reward + gamma * max_a' Q(s',a') - Q(s,a))
-            # Let s be an empty state (the game itself), a be the joint action (atk_strat, def_strat) - not quite right.
-
-            # Let's update Q_attacker[atk_strat][def_strat]
-            # The 'next state' is effectively the game re-starting, so what's max_q_next?
-            # max_q_next_atk = max(q_attacker[atk_strat].values()) # Max Q if attacker sticks with atk_strat, defender varies
-            max_q_next_atk = 0
-            if q_attacker.get(atk_strat):
-                 max_q_next_atk = max(q_attacker[atk_strat].values())
-
-            q_attacker[atk_strat][def_strat] = old_q_atk + alpha * (atk_payoff + gamma * max_q_next_atk - old_q_atk)
-
-        if q_defender is not None:
-            old_q_def = q_defender.get(def_strat, {}).get(atk_strat, 0.0)
-            # max_q_next_def = max(q_defender[def_strat].values()) # Max Q if defender sticks with def_strat, attacker varies
-            max_q_next_def = 0
-            if q_defender.get(def_strat):
-                max_q_next_def = max(q_defender[def_strat].values())
-            q_defender[def_strat][atk_strat] = old_q_def + alpha * (def_payoff + gamma * max_q_next_def - old_q_def)
-
-    elif game_type == "Bayesian Game":
-        # Update observed payoffs
-        learning_models.get('attacker_observed_defender_payoffs', {}).setdefault(atk_strat, {}).setdefault(def_strat, []).append(atk_payoff)
-        learning_models.get('defender_observed_attacker_payoffs', {}).setdefault(def_strat, {}).setdefault(atk_strat, []).append(def_payoff)
-
-        # Update beliefs (simplified: based on frequency of opponent's plays, or could be proper Bayesian update)
-        # For a proper Bayesian update, we'd use the likelihood of observing the opponent's play given our strategy and their types.
-        # Simplified: increase probability of observed opponent strategy
-        # This is a very naive belief update. A real Bayesian update is more complex.
-        attacker_belief_on_defender = learning_models.get('attacker_belief_on_defender', {})
-        if attacker_belief_on_defender:
-            # Simple history-based update: count plays and normalize
-            # This requires history to be accessible or pass counts
-            # For now, let's assume the select_strategies uses the current beliefs,
-            # and beliefs are updated based on a more sophisticated model if needed.
-            # A simple update could be: slightly increase belief in the chosen def_strat
-            # and renormalize. This is not strictly Bayesian.
-            # For now, let's assume beliefs are updated by observing payoffs and opponent actions.
-            # Example: if def_strat was played, increase its belief score.
-            # This is a placeholder for a more robust Bayesian belief update mechanism.
-            # One simple way: Dirichlet distribution update based on counts.
-            # Let's just record history for now, actual belief update in select_strategies.
-            pass # The selection logic already uses observed payoffs to guide choice.
-
-    elif game_type == "Static":
-        # No learning updates for static strategies
-        pass
+def update_learning_models(game_model, current_state_tuple, atk_strat, def_strat, atk_payoff, def_payoff,
+                           next_state_tuple, learning_models, attacker_strategies, defender_strategies,
+                           is_terminal_step=False):
+    # ... (Q-Learning and Bayesian update logic as in previous "enhanced" version, using the new state tuples) ...
+    alpha = learning_models['alpha']; gamma = learning_models['gamma']
+    if game_model == "Q-Learning":
+        q_attacker = learning_models['q_attacker']; q_defender = learning_models['q_defender']
+        # Ensure state-action pairs exist, init with small positive for optimism if new
+        if current_state_tuple not in q_attacker: q_attacker[current_state_tuple] = {a: 0.01 for a in attacker_strategies}
+        if atk_strat not in q_attacker[current_state_tuple]: q_attacker[current_state_tuple][atk_strat] = 0.01
+        if current_state_tuple not in q_defender: q_defender[current_state_tuple] = {d: 0.01 for d in defender_strategies}
+        if def_strat not in q_defender[current_state_tuple]: q_defender[current_state_tuple][def_strat] = 0.01
         
-    elif game_type == "Coalition Formation":
-        # If using Q-learning base for coalitions, update Q-tables similar to "Q-Learning"
-        if 'q_attacker' in learning_models and 'q_defender' in learning_models:
-            q_attacker = learning_models['q_attacker']
-            q_defender = learning_models['q_defender']
-            
-            old_q_atk = q_attacker.get(atk_strat, {}).get(def_strat, 0.0)
-            max_q_next_atk = 0
-            if q_attacker.get(atk_strat):
-                 max_q_next_atk = max(q_attacker[atk_strat].values())
-            q_attacker[atk_strat][def_strat] = old_q_atk + alpha * (atk_payoff + gamma * max_q_next_atk - old_q_atk)
+        # Attacker
+        old_q_atk = q_attacker[current_state_tuple][atk_strat]
+        max_future_q_atk = 0
+        if not is_terminal_step:
+            if next_state_tuple not in q_attacker: q_attacker[next_state_tuple] = {a: 0.01 for a in attacker_strategies} # Optimistic for unseen next states
+            if q_attacker[next_state_tuple]: max_future_q_atk = max(q_attacker[next_state_tuple].values())
+        q_attacker[current_state_tuple][atk_strat] = old_q_atk + alpha * (atk_payoff + gamma * max_future_q_atk - old_q_atk)
+        # Defender
+        old_q_def = q_defender[current_state_tuple][def_strat]
+        max_future_q_def = 0
+        if not is_terminal_step:
+            if next_state_tuple not in q_defender: q_defender[next_state_tuple] = {d: 0.01 for d in defender_strategies}
+            if q_defender[next_state_tuple]: max_future_q_def = max(q_defender[next_state_tuple].values())
+        q_defender[current_state_tuple][def_strat] = old_q_def + alpha * (def_payoff + gamma * max_future_q_def - old_q_def)
 
-            old_q_def = q_defender.get(def_strat, {}).get(atk_strat, 0.0)
-            max_q_next_def = 0
-            if q_defender.get(def_strat):
-                max_q_next_def = max(q_defender[def_strat].values())
-            q_defender[def_strat][atk_strat] = old_q_def + alpha * (def_payoff + gamma * max_q_next_def - old_q_def)
-
-
-    return learning_models # Return the updated models
+    elif game_model == "Bayesian Game":
+        learning_models['attacker_observed_defender_plays'][def_strat] += 1
+        learning_models['defender_observed_attacker_plays'][atk_strat] += 1
+        total_def_plays = sum(learning_models['attacker_observed_defender_plays'].values())
+        if total_def_plays > 0:
+            for d_s in defender_strategies: learning_models['attacker_belief_on_defender_strategy'][d_s] = learning_models['attacker_observed_defender_plays'][d_s] / total_def_plays
+        total_atk_plays = sum(learning_models['defender_observed_attacker_plays'].values())
+        if total_atk_plays > 0:
+            for a_s in attacker_strategies: learning_models['defender_belief_on_attacker_strategy'][a_s] = learning_models['defender_observed_attacker_plays'][a_s] / total_atk_plays
+        
+        # Update avg payoffs
+        count_atk = learning_models['payoff_counts_attacker'][atk_strat][def_strat]
+        learning_models['avg_payoffs_attacker'][atk_strat][def_strat] = (learning_models['avg_payoffs_attacker'][atk_strat][def_strat] * count_atk + atk_payoff) / (count_atk + 1)
+        learning_models['payoff_counts_attacker'][atk_strat][def_strat] += 1
+        count_def = learning_models['payoff_counts_defender'][def_strat][atk_strat]
+        learning_models['avg_payoffs_defender'][def_strat][atk_strat] = (learning_models['avg_payoffs_defender'][def_strat][atk_strat] * count_def + def_payoff) / (count_def + 1)
+        learning_models['payoff_counts_defender'][def_strat][atk_strat] += 1
+    return learning_models
 
 def assign_coalitions(network):
-    """
-    Assigns nodes to coalitions. Example: random assignment or based on proximity.
-    Modifies and returns the network.
-    """
-    num_nodes = len(network.nodes)
-    if num_nodes == 0:
-        return network
-        
-    # Example: Simple random assignment to one of two coalitions
-    # More complex logic would go here (e.g., based on node type, connectivity, etc.)
-    # Coalition IDs could be anything, e.g., 0 and 1 for two coalitions.
-    # Or, could relate to attacker/defender roles within the coalition.
-    
-    # For simplicity, let's say there are two main coalitions: "AttackerSide" and "DefenderSide"
-    # This is a very high-level assignment. Real coalition formation is dynamic.
-    
-    # Example: if nodes > 0, assign half to coalition 0, half to coalition 1 (approx)
-    nodes_list = list(network.nodes())
-    random.shuffle(nodes_list) # Shuffle for random assignment
-    
-    # For simulation purposes, attacker might be one entity, defenders are nodes.
-    # Or, multiple attackers form a coalition, multiple defenders form another.
-    # Let's assume nodes form defensive coalitions.
-    
-    # Example: create 2 defender coalitions if num_nodes > 1
+    # ... (no changes) ...
+    num_nodes = len(network.nodes);
+    if num_nodes == 0: return network
+    nodes_list = list(network.nodes()); random.shuffle(nodes_list)
     if num_nodes > 1:
-        num_coalitions = 2 
-        for i, node_id in enumerate(nodes_list):
-            network.nodes[node_id]['coalition'] = i % num_coalitions
-    elif num_nodes == 1:
-         network.nodes[nodes_list[0]]['coalition'] = 0 # Single node in its own coalition
-         
-    # print(f"Assigned coalitions: {nx.get_node_attributes(network, 'coalition')}")
+        for i, node_id in enumerate(nodes_list): network.nodes[node_id]['coalition'] = i % 2
+    elif num_nodes == 1: network.nodes[nodes_list[0]]['coalition'] = 0
     return network
