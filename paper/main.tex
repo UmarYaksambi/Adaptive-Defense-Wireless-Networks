@@ -1,0 +1,113 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{cite}
+
+\begin{document}
+
+\title{A Comparative Study of Game-Theoretic and Reinforcement Learning Approaches for Jam-Resilient Wireless Networks in IoT}
+
+\author{
+  \IEEEauthorblockN{Muhammad Umar Yaksambi}
+  \IEEEauthorblockA{
+    Department of Computer Science (Data Sciences)\\
+    RV College Of Engineering\\
+    Bengaluru, India\\
+    Email: umaryaksambi@gmail.com
+  }
+  \and
+  \IEEEauthorblockN{Anuj Devapura}
+  \IEEEauthorblockA{
+    Department of Computer Science (Data Sciences)\\
+    RV College Of Engineering\\
+    Bengaluru, India\\
+    Email: anujdevapura@gmail.com
+  }
+  \and
+  \IEEEauthorblockN{Sadashiv Todakar}
+  \IEEEauthorblockA{
+    Department of Computer Science (Data Sciences)\\
+    RV College Of Engineering\\
+    Bengaluru, India\\
+    Email: sadashivtodakar@gmail.com
+  }
+}
+
+\maketitle
+
+\begin{abstract}
+Jamming attacks pose a significant threat to the reliability and security of Internet-of-Things (IoT) wireless networks. Traditional static defenses often fail to adapt to intelligent adversaries, while classical game-theoretic models can converge prematurely or make unrealistic assumptions. In this work, we develop a modular simulator to compare three paradigms of attack and defense: static strategies, Bayesian game-theoretic strategies with dynamic beliefs, and multi-agent Q-learning. We evaluate all nine attacker–defender matchups across Random (Erdős–Rényi) and Small-World topologies, varying node counts (10, 20, 50) and connectivity parameters. Over 4,000 trials and 300-step simulations, we measure attacker payoff, defender payoff, network health, and detection rate. One-way ANOVA confirms statistically significant differences in payoff and detection (p < 0.0001) across matchups. Key findings: Q-learning defenders consistently achieve the highest payoffs, static defenders preserve network health best, and Bayesian attackers maintain stealth. Our results demonstrate the necessity of selecting context-aware adaptive defenses in resource-constrained IoT environments.
+\end{abstract}
+
+\begin{IEEEkeywords}
+IoT security, jamming, game theory, Bayesian games, Q-learning, adaptive defense
+\end{IEEEkeywords}
+
+\section{Introduction}
+The proliferation of IoT devices across smart homes, industrial automation, and critical infrastructure has created vast, resource-constrained wireless networks. These networks are vulnerable to jamming attacks, wherein an adversary transmits interference signals to disrupt legitimate communication. Conventional static defenses—such as fixed channel hopping—lack the adaptability to counter intelligent or adaptive jammers. Game-theoretic approaches model strategic interaction but often assume complete information or equilibrium play that may not hold in dynamic wireless environments. In contrast, reinforcement learning (RL) enables agents to learn directly from interaction, potentially adjusting to evolving adversarial behaviors.
+
+In this paper, we present a comparative study of static, Bayesian, and Q-learning-based attack and defense strategies. We implement a modular simulator supporting both Random and Small-World topologies, dynamic belief updates, and stateful Q-learning with reward shaping. By exhaustively evaluating every attacker–defender pairing, we quantify how each strategy combination impacts network resilience, resource cost, and attacker detectability.
+
+\section{Related Work}
+Early anti-jamming techniques—frequency hopping, spread spectrum, coding—assume non-adaptive attackers and often incur high overhead~\cite{Xiao2016}. Game-theoretic models, including Stackelberg and Bayesian games, have been applied to wireless security~\cite{Altman2007} but frequently rely on unrealistic equilibrium assumptions. RL methods demonstrate promise in adaptive anti-jamming~\cite{Zhang2019,Wang2020} yet lack direct comparison to classical game-theoretic baselines. Our work bridges this gap by implementing and evaluating both paradigms under identical conditions.
+
+\section{System Model and Assumptions}
+\subsection{Network Topology}
+We consider undirected graphs of \(N\) nodes under:
+\begin{itemize}
+  \item \textbf{Random (Erdős–Rényi):} Edge probability \(p\).
+  \item \textbf{Small-World (Watts–Strogatz):} Each node connects to \(k\) neighbors with rewiring probability \(r\).
+\end{itemize}
+
+\subsection{Spectrum Model}
+A finite set of frequency channels \(\{1,\dots,F\}\). Each node selects one channel per time step.
+
+\subsection{Strategy Paradigms}
+\textbf{Static:} Fixed “broadband” jamming or fixed “hop” defense.  
+\textbf{Bayesian:} Agents maintain and update beliefs over opponents’ strategies using frequency counts and choose the expected-payoff-maximizer with small \(\epsilon\)-exploration.  
+\textbf{Q-Learning:} Independent, stateful Q-learning with \(\epsilon\)-decay. State encodes network health bucket, defender trend, jamming severity, and simulation phase; reward shaping penalizes predictability and rewards health improvements.
+
+\subsection{Payoff Function}
+Attacker payoff:
+\[
+R_a = 10\frac{J}{N} - \text{cost} - P_{\mathrm{detect}}\Delta_d + B_a,
+\]
+Defender payoff:
+\[
+R_d = 10\frac{G}{N} - \text{cost} + B_d,
+\]
+where \(J\) and \(G\) are counts of jammed and protected nodes, respectively, \(\Delta_d\) is detection penalty, and \(B_a,B_d\) are bonus terms.
+
+\section{Experimental Setup}
+Simulations in Python (NetworkX, NumPy) cover nine attacker–defender pairings across:
+\begin{itemize}
+  \item Topologies: Random (\(p=0.4\)), Small-World (\(k=6,r=0.1\)).
+  \item Node counts: \(N\in\{10,20,50\}\).
+  \item Steps: 300 per trial; Trials: 5 seeds per configuration.
+\end{itemize}
+Metrics recorded: attacker payoff, defender payoff, network health, detection events. We compute interval averages over the last 100 steps. Statistical significance tested via one-way ANOVA.
+
+\section{Results}
+\subsection{Attacker Payoff}
+ANOVA confirms significant differences (\(F=254.8, p<0.0001\)). Static attackers yield the worst payoffs (mean ≈–6.8), Bayesian attackers fare best against Bayesian defenders (mean ≈–0.68), and Q-learning attackers achieve intermediate payoffs (mean ≈–2.22).
+
+\subsection{Defender Payoff}
+Significant differences observed (\(F=19.9, p<0.0001\)). Q-learning defenders attain the highest payoffs (up to ≈7.54 vs static attackers), Bayesian defenders are lower (mean ≈5.12), and static defenders perform variably across attacker types.
+
+\subsection{Network Health}
+ANOVA indicates differences (\(F=5.90, p<0.0001\)), though all health levels exceed 0.82. Static defense yields perfect health (1.0), while adaptive defenses allow minor dips (≈0.865 vs Bayesian attackers).
+
+\subsection{Detection Rate}
+Detection varies significantly (\(F=76.95, p<0.0001\)). Bayesian attackers are stealthiest (≈0.26), Q-learning attackers moderate (≈0.33), and static attackers most exposed (≈0.51).
+
+\section{Discussion}
+No single defense universally dominates. Q-learning defenders maximize payoff but occasionally sacrifice health. Static defenders guarantee connectivity at the expense of adaptability. Bayesian attackers optimize stealth, while static attackers are easily detected. These results underscore the importance of context-aware strategy selection in IoT deployments.
+
+\section{Conclusion}
+We presented a comprehensive comparison of static, Bayesian, and Q-learning anti-jamming strategies in IoT networks. Q-learning defenders are most effective overall; static defenses best preserve network health; Bayesian attackers maintain stealth. Future work includes deep RL methods, mobility, fading, and physical testbed validation.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
