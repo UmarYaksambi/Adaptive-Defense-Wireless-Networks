@@ -1,25 +1,30 @@
 # plot_results.py
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker # For formatting ticks
+import matplotlib.ticker as mticker
 import seaborn as sns
 import numpy as np
 import os
 from scipy.stats import ttest_ind, f_oneway
-import glob # To find result files
-import re # Import regex for robust filename cleaning
+import glob 
+import re
+import time 
 
 # --- Configuration ---
-# RESULTS_DIR is now a fixed directory where run_experiments.py saves data (assuming it doesn't use timestamp)
-RESULTS_DIR = "results"
-# PLOTS_DIR is now a fixed directory in the current working directory
-PLOTS_DIR = "plots"
+# RESULTS_DIR will be dynamically set to the latest results folder
+RESULTS_DIR = None # Initialize as None
+# PLOTS_DIR will be a subdirectory within RESULTS_DIR
+PLOTS_SUBDIR_NAME = "plots" # Name of the plots subdirectory
 DETAILED_HISTORIES_SUBDIR = "detailed_histories_consolidated" # Matches run_experiments.py
 
-# Ensure plots directory exists
-os.makedirs(PLOTS_DIR, exist_ok=True)
-print(f"Plots will be saved in: {PLOTS_DIR}")
-
+# --- Helper to find the latest results directory ---
+def find_latest_results_dir(base_pattern="results_*"):
+    """Finds the latest timestamped results directory."""
+    list_of_results_dirs = glob.glob(base_pattern)
+    if not list_of_results_dirs:
+        return None
+    # Sort by creation time and return the latest
+    return max(list_of_results_dirs, key=os.path.getctime)
 
 # --- Helper for robust filename cleaning ---
 def clean_filename(filename):
@@ -66,12 +71,6 @@ def load_data_from_multiple_interval_logs(results_dir_path, file_pattern="*_inte
 
     combined_df = pd.concat(df_list, ignore_index=True)
     print(f"Loaded {len(combined_df)} rows from {len(all_files)} interval log files.")
-
-    # 🐛 Debugging: Print columns to check for 'atk_q_init_val'
-    # print("\nDataFrame Columns after loading:")
-    # print(combined_df.columns.tolist())
-    # print("-" * 20)
-
 
     # Ensure numeric types for relevant columns
     cols_to_numeric = ['interval_avg_attacker_payoff', 'interval_avg_defender_payoff',
@@ -211,6 +210,7 @@ def plot_payoff_convergence_over_steps(df, plots_dir, # Pass plots_dir
     ]
     # Remove empty parts and join
     short_filename = "_".join([p for p in short_filename_parts if p]) + ".png"
+    # Save to the plots_dir passed to the function - Explicitly join
     save_path = os.path.join(plots_dir, short_filename)
     plt.savefig(save_path)
     plt.close()
@@ -574,128 +574,135 @@ def perform_statistical_tests(df, last_step_only=True):
 
 # --- Main plotting and analysis logic ---
 if __name__ == "__main__":
-    # Use the fixed RESULTS_DIR and PLOTS_DIR
-    # Ensure plots directory exists
-    os.makedirs(PLOTS_DIR, exist_ok=True)
-    print(f"Plots will be saved in: {PLOTS_DIR}")
-    print(f"Attempting to load data from: {RESULTS_DIR}")
+    # Find the latest results directory
+    RESULTS_DIR = find_latest_results_dir()
 
-
-    all_data = load_data_from_multiple_interval_logs(RESULTS_DIR)
-
-    if all_data is not None and not all_data.empty:
-        print(f"Data loaded successfully. Total rows: {len(all_data)}")
-
-        # Define common filters for network configuration if needed for specific plots
-        # Example: Filter for a specific topology and node count
-        common_filters = {
-            'topology': 'Random (Erdős–Rényi)', # Or 'Small-World'
-            'num_nodes': 10,
-            'connectivity_param': '0.4' # Or '(6, 0.1)' as string
-        }
-        # Ensure connectivity_param is a string in filters if it's a tuple in reality
-
-        # 1. Plot Matchup Matrix Heatmaps for key metrics (Avg Payoff, Health, Detection Rate)
-        print("\nGenerating Matchup Matrix Heatmaps...")
-        plot_matchup_matrix_heatmap(all_data, PLOTS_DIR, metric_col="interval_avg_attacker_payoff",
-                                    filters=common_filters, filename="atk_payoff_matchup_matrix")
-        plot_matchup_matrix_heatmap(all_data, PLOTS_DIR, metric_col="interval_avg_defender_payoff",
-                                    filters=common_filters, filename="def_payoff_matchup_matrix")
-        plot_matchup_matrix_heatmap(all_data, PLOTS_DIR, metric_col="current_network_health",
-                                    filters=common_filters, filename="net_health_matchup_matrix")
-        plot_matchup_matrix_heatmap(all_data, PLOTS_DIR, metric_col="interval_detection_rate",
-                                    filters=common_filters, filename="detection_rate_matchup_matrix")
-
-
-        # 2. Plot Payoff Convergence for specific matchups (e.g., Q vs Bayesian, Q vs Static)
-        # This requires picking specific parameter sets if Q-Learning is involved.
-        # For simplicity, let's plot convergence for the first parameter set found for Q-Learning
-        # You would adjust these filters to analyze specific parameter tunings.
-        print("\nGenerating Convergence Plots for Specific Matchups...")
-        q_params_example_atk = {'alpha': 0.1, 'gamma': 0.9, 'epsilon_start': 0.5, 'epsilon_decay': 0.998, 'epsilon_min': 0.01, 'hybrid_static_steps': 0, 'q_init_val': 0.01}
-        q_params_example_def = {'alpha': 0.1, 'gamma': 0.9, 'epsilon_start': 0.5, 'epsilon_decay': 0.998, 'epsilon_min': 0.01, 'hybrid_static_steps': 0, 'q_init_val': 0.01}
-
-        # Example convergence plots for a specific network config
-        convergence_filters = {
-            'topology': 'Random (Erdős–Rényi)',
-            'num_nodes': 10,
-            'connectivity_param': '0.4'
-        }
-
-        # Q-Learning Attacker vs Bayesian Defender
-        plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Q-Learning", defender_model_filter="Bayesian Game",
-                                           topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
-                                           conn_param_filter=convergence_filters['connectivity_param'],
-                                           attacker_param_filters=q_params_example_atk, # Use example Q params for attacker
-                                           player_type='defender', filename_prefix="conv_QL_vs_Bayes_def")
-        plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Q-Learning", defender_model_filter="Bayesian Game",
-                                           topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
-                                           conn_param_filter=convergence_filters['connectivity_param'],
-                                           attacker_param_filters=q_params_example_atk, # Use example Q params for attacker
-                                           player_type='attacker', filename_prefix="conv_QL_vs_Bayes_atk")
-
-        # Bayesian Attacker vs Q-Learning Defender
-        plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Bayesian Game", defender_model_filter="Q-Learning",
-                                           topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
-                                           conn_param_filter=convergence_filters['connectivity_param'],
-                                           defender_param_filters=q_params_example_def, # Use example Q params for defender
-                                           player_type='defender', filename_prefix="conv_Bayes_vs_QL_def")
-        plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Bayesian Game", defender_model_filter="Q-Learning",
-                                           topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
-                                           conn_param_filter=convergence_filters['connectivity_param'],
-                                           defender_param_filters=q_params_example_def, # Use example Q params for defender
-                                           player_type='attacker', filename_prefix="conv_Bayes_vs_QL_atk")
-
-        # Q-Learning vs Q-Learning (Self-play convergence)
-        plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Q-Learning", defender_model_filter="Q-Learning",
-                                           topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
-                                           conn_param_filter=convergence_filters['connectivity_param'],
-                                           attacker_param_filters=q_params_example_atk, defender_param_filters=q_params_example_def,
-                                           player_type='defender', filename_prefix="conv_QL_vs_QL_def")
-        plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Q-Learning", defender_model_filter="Q-Learning",
-                                           topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
-                                           conn_param_filter=convergence_filters['connectivity_param'],
-                                           attacker_param_filters=q_params_example_atk, defender_param_filters=q_params_example_def,
-                                           player_type='attacker', filename_prefix="conv_QL_vs_QL_atk")
-
-
-        # 3. Box Plots for final performance comparison (grouped by attacker model, hue by defender model)
-        print("\nGenerating Boxplots...")
-        plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="interval_avg_attacker_payoff",
-                                        x_axis_col="attacker_model", hue_col="defender_model",
-                                        filters=common_filters) # Apply common network filters
-        plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="interval_avg_defender_payoff",
-                                        x_axis_col="attacker_model", hue_col="defender_model",
-                                        filters=common_filters)
-        plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="current_network_health",
-                                        x_axis_col="attacker_model", hue_col="defender_model",
-                                        filters=common_filters)
-        plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="interval_detection_rate",
-                                        x_axis_col="attacker_model", hue_col="defender_model",
-                                        filters=common_filters)
-
-        # You can also swap x and hue axes to see defender model on x-axis
-        plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="interval_avg_defender_payoff",
-                                        x_axis_col="defender_model", hue_col="attacker_model",
-                                        filters=common_filters, filename="def_payoff_boxplot_def_hue_atk.png")
-
-
-        # 4. Strategy Frequency Heatmaps (per matchup)
-        # This function now generates a heatmap for EACH unique matchup found in the data,
-        # showing the frequency of strategies used *within* that matchup.
-        print("\nGenerating Strategy Frequency Heatmaps (per matchup)...")
-        plot_strategy_frequency_heatmap(all_data, PLOTS_DIR, player_type="atk", filters=common_filters)
-        plot_strategy_frequency_heatmap(all_data, PLOTS_DIR, player_type="def", filters=common_filters)
-
-
-        # 5. Perform Statistical Tests
-        print("\nPerforming Statistical Tests...")
-        perform_statistical_tests(all_data, last_step_only=True)
-
-
-        print(f"\nPlotting and analysis complete. Check the '{PLOTS_DIR}' directory.")
-        print(f"Results directory used: {RESULTS_DIR}")
-
+    if RESULTS_DIR is None:
+        print("No results directories found matching 'results_*'. Please run run_experiments.py first.")
     else:
-        print("Could not load data from interval logs. No plots or analysis will be performed.")
-        print(f"Attempted to load from: {RESULTS_DIR}")
+        print(f"Using latest results directory: {RESULTS_DIR}")
+        # Define the path for the plots directory within the results directory
+        PLOTS_DIR = os.path.join(RESULTS_DIR, PLOTS_SUBDIR_NAME)
+        # Ensure plots directory exists
+        os.makedirs(PLOTS_DIR, exist_ok=True)
+        print(f"Plots will be saved in: {PLOTS_DIR}")
+
+
+        all_data = load_data_from_multiple_interval_logs(RESULTS_DIR)
+
+        if all_data is not None and not all_data.empty:
+            print(f"Data loaded successfully. Total rows: {len(all_data)}")
+
+            # Define common filters for network configuration if needed for specific plots
+            # Example: Filter for a specific topology and node count
+            common_filters = {
+                'topology': 'Random (Erdős–Rényi)', # Or 'Small-World'
+                'num_nodes': 10,
+                'connectivity_param': '0.4' # Or '(6, 0.1)' as string
+            }
+            # Ensure connectivity_param is a string in filters if it's a tuple in reality
+
+            # 1. Plot Matchup Matrix Heatmaps for key metrics (Avg Payoff, Health, Detection Rate)
+            print("\nGenerating Matchup Matrix Heatmaps...")
+            plot_matchup_matrix_heatmap(all_data, PLOTS_DIR, metric_col="interval_avg_attacker_payoff",
+                                        filters=common_filters, filename="atk_payoff_matchup_matrix")
+            plot_matchup_matrix_heatmap(all_data, PLOTS_DIR, metric_col="interval_avg_defender_payoff",
+                                        filters=common_filters, filename="def_payoff_matchup_matrix")
+            plot_matchup_matrix_heatmap(all_data, PLOTS_DIR, metric_col="current_network_health",
+                                        filters=common_filters, filename="net_health_matchup_matrix")
+            plot_matchup_matrix_heatmap(all_data, PLOTS_DIR, metric_col="interval_detection_rate",
+                                        filters=common_filters, filename="detection_rate_matchup_matrix")
+
+
+            # 2. Plot Payoff Convergence for specific matchups (e.g., Q vs Bayesian, Q vs Static)
+            # This requires picking specific parameter sets if Q-Learning is involved.
+            # For simplicity, let's plot convergence for the first parameter set found for Q-Learning
+            # You would adjust these filters to analyze specific parameter tunings.
+            print("\nGenerating Convergence Plots for Specific Matchups...")
+            q_params_example_atk = {'alpha': 0.1, 'gamma': 0.9, 'epsilon_start': 0.5, 'epsilon_decay': 0.998, 'epsilon_min': 0.01, 'hybrid_static_steps': 0, 'q_init_val': 0.01}
+            q_params_example_def = {'alpha': 0.1, 'gamma': 0.9, 'epsilon_start': 0.5, 'epsilon_decay': 0.998, 'epsilon_min': 0.01, 'hybrid_static_steps': 0, 'q_init_val': 0.01}
+
+            # Example convergence plots for a specific network config
+            convergence_filters = {
+                'topology': 'Random (Erdős–Rényi)',
+                'num_nodes': 10,
+                'connectivity_param': '0.4'
+            }
+
+            # Q-Learning Attacker vs Bayesian Defender
+            plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Q-Learning", defender_model_filter="Bayesian Game",
+                                               topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
+                                               conn_param_filter=convergence_filters['connectivity_param'],
+                                               attacker_param_filters=q_params_example_atk, # Use example Q params for attacker
+                                               player_type='defender', filename_prefix="conv_QL_vs_Bayes_def")
+            plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Q-Learning", defender_model_filter="Bayesian Game",
+                                               topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
+                                               conn_param_filter=convergence_filters['connectivity_param'],
+                                               attacker_param_filters=q_params_example_atk, # Use example Q params for attacker
+                                               player_type='attacker', filename_prefix="conv_QL_vs_Bayes_atk")
+
+            # Bayesian Attacker vs Q-Learning Defender
+            plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Bayesian Game", defender_model_filter="Q-Learning",
+                                               topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
+                                               conn_param_filter=convergence_filters['connectivity_param'],
+                                               defender_param_filters=q_params_example_def, # Use example Q params for defender
+                                               player_type='defender', filename_prefix="conv_Bayes_vs_QL_def")
+            plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Bayesian Game", defender_model_filter="Q-Learning",
+                                               topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
+                                               conn_param_filter=convergence_filters['connectivity_param'],
+                                               defender_param_filters=q_params_example_def, # Use example Q params for defender
+                                               player_type='attacker', filename_prefix="conv_Bayes_vs_QL_atk")
+
+            # Q-Learning vs Q-Learning (Self-play convergence)
+            plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Q-Learning", defender_model_filter="Q-Learning",
+                                               topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
+                                               conn_param_filter=convergence_filters['connectivity_param'],
+                                               attacker_param_filters=q_params_example_atk, defender_param_filters=q_params_example_def,
+                                               player_type='defender', filename_prefix="conv_QL_vs_QL_def")
+            plot_payoff_convergence_over_steps(all_data, PLOTS_DIR, attacker_model_filter="Q-Learning", defender_model_filter="Q-Learning",
+                                               topology_filter=convergence_filters['topology'], node_count_filter=convergence_filters['num_nodes'],
+                                               conn_param_filter=convergence_filters['connectivity_param'],
+                                               attacker_param_filters=q_params_example_atk, defender_param_filters=q_params_example_def,
+                                               player_type='attacker', filename_prefix="conv_QL_vs_QL_atk")
+
+
+            # 3. Box Plots for final performance comparison (grouped by attacker model, hue by defender model)
+            print("\nGenerating Boxplots...")
+            plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="interval_avg_attacker_payoff",
+                                            x_axis_col="attacker_model", hue_col="defender_model",
+                                            filters=common_filters) # Apply common network filters
+            plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="interval_avg_defender_payoff",
+                                            x_axis_col="attacker_model", hue_col="defender_model",
+                                            filters=common_filters)
+            plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="current_network_health",
+                                            x_axis_col="attacker_model", hue_col="defender_model",
+                                            filters=common_filters)
+            plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="interval_detection_rate",
+                                            x_axis_col="attacker_model", hue_col="defender_model",
+                                            filters=common_filters)
+
+            # You can also swap x and hue axes to see defender model on x-axis
+            plot_metric_comparison_boxplots(all_data, PLOTS_DIR, metric_col="interval_avg_defender_payoff",
+                                            x_axis_col="defender_model", hue_col="attacker_model",
+                                            filters=common_filters, filename="def_payoff_boxplot_def_hue_atk.png")
+
+
+            # 4. Strategy Frequency Heatmaps (per matchup)
+            # This function now generates a heatmap for EACH unique matchup found in the data,
+            # showing the frequency of strategies used *within* that matchup.
+            print("\nGenerating Strategy Frequency Heatmaps (per matchup)...")
+            plot_strategy_frequency_heatmap(all_data, PLOTS_DIR, player_type="atk", filters=common_filters)
+            plot_strategy_frequency_heatmap(all_data, PLOTS_DIR, player_type="def", filters=common_filters)
+
+
+            # 5. Perform Statistical Tests
+            print("\nPerforming Statistical Tests...")
+            perform_statistical_tests(all_data, last_step_only=True)
+
+
+            print(f"\nPlotting and analysis complete. Check the '{PLOTS_SUBDIR_NAME}' directory inside the results folder.")
+            print(f"Results directory used: {RESULTS_DIR}")
+
+        else:
+            print("Could not load data from interval logs. No plots or analysis will be performed.")
+            print(f"Attempted to load from: {RESULTS_DIR}")

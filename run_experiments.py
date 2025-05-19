@@ -4,7 +4,7 @@ import random
 import numpy as np
 import os
 import networkx as nx
-import time # Import time for timestamping
+import time 
 
 from core_sim import (generate_network, select_attacker_strategy, select_defender_strategy, # Import split functions
                       execute_attack, execute_defense, payoff, update_learning_models,
@@ -292,9 +292,9 @@ if __name__ == "__main__":
     DEFENDER_MODELS = ["Q-Learning", "Bayesian Game", "Static"]
     # Add other models here as they are implemented (e.g., "Coalition Formation", "Stackelberg")
 
-    TOPOLOGIES = ["Random (Erdős–Rényi)", "Small-World"] # Reduced set for faster testing
-    NODE_COUNTS = [10] # Keep low for dev
-    CONNECTIVITY_PARAMS = { "Random (Erdős–Rényi)": [0.4], "Small-World": [(6, 0.1)] }
+    TOPOLOGIES = ["Random (Erdős–Rényi)", "Small-World", "Star"] # Reduced set for faster testing
+    NODE_COUNTS = [10, 20, 50] # Keep low for dev
+    CONNECTIVITY_PARAMS = { "Random (Erdős–Rényi)": [0.4], "Small-World": [(6, 0.1)], "Star": [None] }
 
     RUNS_PER_SETTING = 5 # Keep low for dev, increase for paper (e.g., 10-30)
     SIMULATION_STEPS = 500 # 🔹 Step 5: Increased simulation horizon (500-1000 is better for learning convergence)
