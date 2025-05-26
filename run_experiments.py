@@ -43,7 +43,7 @@ def get_topology_metrics(G):
 
 # 🔹 Step 2: Modify simulate to handle separate attacker/defender models and learning
 def simulate(attacker_model, defender_model, topology, num_nodes=10,
-             steps=300, # 🔹 Step 5: Long-Horizon Simulations (300-500)
+             steps=500, # 🔹 Step 5: Long-Horizon Simulations (300-500)
              trials=5, save_path="results.csv",
              connectivity=0.5,
              frequencies_list=None,
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     DEFENDER_MODELS = ["Q-Learning", "Bayesian Game", "Static"]
     # Add other models here as they are implemented (e.g., "Coalition Formation", "Stackelberg")
 
-    TOPOLOGIES = ["Random (Erdős–Rényi)", "Small-World", "Star"] # Reduced set for faster testing
+    TOPOLOGIES = ["Random (Erdős–Rényi)", "Small-World", "Star", "Ring"] # Reduced set for faster testing
     NODE_COUNTS = [10, 20, 50] # Keep low for dev
     CONNECTIVITY_PARAMS = { "Random (Erdős–Rényi)": [0.4], "Small-World": [(6, 0.1)], "Star": [None] }
 
