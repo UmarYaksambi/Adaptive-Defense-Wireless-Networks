@@ -6,7 +6,9 @@
 \usepackage{algorithm,algpseudocode}
 \usepackage{cite}
 \usepackage{url}
-\usepackage{booktabs} % For better tables
+\usepackage{booktabs} 
+\usepackage[utf8]{inputenc} 
+\usepackage[T1]{fontenc}    
 
 \graphicspath{{figures/}} % Tells LaTeX to look in the 'figures' subdirectory
 
@@ -46,7 +48,13 @@
 
 %======================== Abstract ========================
 \begin{abstract}
-This paper presents a comprehensive comparative analysis of two prominent defense strategies against jamming in wireless Internet-of-Things (IoT) networks: (i) a Bayesian game-theoretic framework and (ii) a Q-Learning–based reinforcement learning (RL) approach. We simulate interactions between attacker and defender agents on Erd\H{o}s–R\'enyi topologies ($n=10$, $p=0.4$), evaluating interval-averaged attacker/defender payoffs, detection rates, and network health over multiple episodes and trials. Detailed matchup matrices and convergence plots illustrate strategic dynamics, while ANOVA tests establish statistical significance across metrics ($p<0.001$). Our findings highlight trade-offs: Bayesian strategies yield robust average performance, whereas Q-Learning adapts rapidly but sometimes converges to suboptimal equilibria. We discuss implications for IoT security and propose directions for hybrid defense mechanisms.
+This paper presents a comparative analysis of two adaptive defense strategies against jamming in wireless Internet-of-Things (IoT) networks: a Bayesian game-theoretic framework and a Q-Learning–based reinforcement learning (RL) approach. Designed for resource-constrained IoT environments, both strategies are evaluated for their effectiveness in mitigating jamming attacks.
+
+Simulations are conducted on Erd\H{o}s–R\'enyi network topologies ($n = 10$, $p = 0.4$) over 300 time steps and five independent trials. Key performance metrics include attacker and defender payoffs, detection rate, and overall network health. Matchup matrices, convergence curves, and statistical validation via ANOVA ($p < 0.001$) are used to assess performance across strategy combinations.
+
+Results show that Bayesian defenders outperform Q-Learning counterparts with a 7.3\% higher detection rate, a 10.2\% lower attacker payoff, and a 5.9\% improvement in network health on average. While Q-Learning enables faster early adaptation, it exhibits greater variability and a tendency to converge to suboptimal policies.
+
+The findings reveal a clear trade-off between learning adaptability and performance stability. Bayesian strategies offer robust, consistent outcomes, making them suitable for predictable defense, while Q-Learning provides reactive flexibility. These insights inform the design of hybrid defenses for future IoT applications. The complete simulation framework is publicly available.
 \end{abstract}
 
 %======================== Keywords ========================
@@ -56,21 +64,24 @@ IoT security, jamming defense, game theory, reinforcement learning, Q-Learning, 
 
 %======================== 1. Introduction ========================
 \section{Introduction}
-The rise of IoT deployments in critical infrastructure and consumer applications increases the exposure of wireless networks to jamming attacks. Attackers exploit the shared medium by transmitting interference on operational frequency channels, resulting in packet loss, reduced throughput, and potential system failures. While static channel-hopping strategies mitigate naive jammers, adaptive adversaries require more sophisticated defenses. Game-theoretic models formalize strategic interaction, allowing defenders to anticipate and counter attacker moves. However, these models rely on predefined payoff structures and may struggle under dynamic conditions. Alternatively, reinforcement learning enables defenders to learn effective policies through trial and error, adapting to evolving attack patterns. Yet, RL solutions may require extensive exploration and suffer from convergence to local optima.
 
-In this work, we perform a head-to-head comparison of a Bayesian game-theoretic defense and a Q-Learning–based RL defense under identical simulation conditions. We address three research questions:
+As wireless Internet-of-Things (IoT) networks proliferate across smart infrastructure, healthcare, and consumer environments, they face growing exposure to jamming attacks that exploit the broadcast nature of shared frequency channels. By injecting interference signals, adversaries can disrupt communication, degrade throughput, and cause mission-critical failures. These threats are particularly concerning in IoT systems, which often operate under tight constraints on energy, memory, and computational capacity.
+
+While simple techniques like channel hopping offer limited protection against static jammers, they fall short against adaptive adversaries. To address this, game-theoretic models have been proposed to anticipate attacker behavior through strategic reasoning. However, such models rely on predefined payoff structures and may underperform when network dynamics evolve unpredictably. On the other hand, reinforcement learning (RL) offers adaptive defense via trial-and-error policy optimization, but it can require substantial exploration and may converge to suboptimal strategies—especially in noisy or sparse-reward environments.
+
+In this paper, we present a head-to-head evaluation of a Bayesian game-theoretic defense and a Q-Learning–based RL defense, both implemented within a common simulation framework. We address the following research questions:
 \begin{enumerate}
-  \item How do average attacker and defender payoffs, detection rates, and network health compare between the strategies?  
-  \item What are the convergence characteristics and stability of the learned policies?  
-  \item Are observed performance differences statistically significant?  
+  \item How do average attacker and defender payoffs, detection rates, and network health compare across strategies?  
+  \item What are the convergence behaviors and stability characteristics of the learned policies?  
+  \item Are the observed differences in performance statistically significant?  
 \end{enumerate}
 
-Our contributions include:
+Our contributions are as follows:
 \begin{itemize}
-  \item Design and implementation of a modular simulation framework supporting multiple defense and attack strategies.  
-  \item Visualization of matchup matrices for four key metrics across all model pairings.  
-  \item Rigorous statistical evaluation via one-way ANOVA tests confirming significant performance differences.  
-  \item Comprehensive analysis of trade-offs, suggesting hybrid approaches for future research.  
+  \item We design and implement a modular simulation framework supporting interchangeable attacker and defender strategies.  
+  \item We visualize strategy matchups using heatmaps for key performance metrics including payoff, detection rate, and network health.  
+  \item We conduct rigorous statistical evaluation using one-way ANOVA to confirm performance differences across strategies.  
+  \item We analyze the trade-offs between stability and adaptability, and propose future hybrid defense mechanisms that combine Bayesian and RL strengths.  
 \end{itemize}
 
 %======================== 2. Related Work ========================
@@ -87,22 +98,42 @@ Comparisons between game-theoretic and RL-based defenses are scarce. Zhao et al.
 %======================== 3. Methodology ========================
 \section{Methodology}
 \subsection{Simulation Environment}
-We construct random network instances using the Erd\H{o}s–R\'enyi model with $n=10$ nodes and connectivity probability $p=0.4$. Each time step, agents choose one of $F=8$ orthogonal frequency channels. Simulations run for $T=300$ steps per trial, with $M=5$ independent trials. Metrics are recorded every $\tau=50$ steps and averaged across trials to reduce variance.
+We simulate interactions on four distinct network topologies to reflect diverse IoT deployment patterns: (i) Erd\H{o}s--R\'enyi random graphs, (ii) Star topologies, (iii) Ring networks, and (iv) Small-World graphs generated via the Watts–Strogatz model. Each topology is instantiated for three different network sizes: $n = 10$, $n = 20$, and $n = 50$ nodes. For Erd\H{o}s--R\'enyi graphs, the connectivity probability is set to $p=0.4$ to ensure moderate density.
+
+At each time step, agents select one of $F=8$ orthogonal frequency channels. This choice reflects realistic communication constraints of low-power IoT protocols such as Zigbee and LoRaWAN, which typically operate in the 868 MHz (EU) or 915 MHz (US) ISM bands with support for 8–16 non-overlapping channels.
+
+Each simulation runs for $T=500$ steps per trial and is repeated across $M=5$ independent trials for statistical reliability. Metrics including attacker payoff, defender payoff, detection rate, and network health are logged every $\tau = 50$ steps and averaged across trials.
 
 \subsection{Strategy Implementations}
-\paragraph{Static Baseline} Agents select channels uniformly at random, providing a lower-bound performance metric.
+\paragraph{Static Baseline} Agents select frequency channels uniformly at random at each time step. This policy serves as a naive baseline, providing a lower-bound performance reference.
 
-\paragraph{Bayesian Game-Theoretic Defense} Defender and attacker maintain beliefs over opponent type ($\theta$) drawn from known distributions (e.g., aggressive vs stealthy jammers). At each step, a mixed strategy $\pi_i^*$ is computed by solving:
+\paragraph{Bayesian Game-Theoretic Defense} Defender and attacker maintain probabilistic beliefs over opponent type ($\theta$) drawn from known distributions (e.g., aggressive vs stealthy jammers). At each time step, the defender computes a mixed strategy $\pi_i^*$ that maximizes expected utility:
 \[
 \pi_i^* = \arg\max_{\pi_i} \mathbb{E}_{\pi_{-i},\theta_{-i}}[u_i(\pi_i,\pi_{-i},\theta_{-i})],
 \]
-where the payoff $u_i$ accounts for successful transmissions, penalty for detection errors, and network health contributions. Beliefs are updated via Bayes' rule after observing opponent actions.
+where the payoff function $u_i$ captures the benefits of successful transmissions, penalties for detection errors, and overall network health. The belief distribution is updated using Bayes' rule based on observed opponent behavior.
 
-\paragraph{Q-Learning RL Defense} State $s$ encapsulates: health bucket $h_b$, jammed bucket $j_b$, protocol phase $\phi$, previous actions $a_{t-1},d_{t-1}$, and summary histories $H_a, H_d$. Action set $A=\{1,...,8\}$. Reward $r$ equals defender payoff: $r = \beta \times \mathbb{I}[\text{successful transmission}] - \delta \times \mathbb{I}[\text{jammed}] + \eta \times \mathbb{I}[\text{detection}]$. Q-values updated with learning rate $\alpha=0.1$, discount $\gamma=0.9$, and $\epsilon$-greedy exploration ($\epsilon_{0}=0.5$, decay=0.998, $\epsilon_{\min}=0.01$).
+\paragraph{Q-Learning RL Defense} The RL agent represents the defender and operates using a discrete state-action space. The state $s$ includes the health bucket $h_b$, jammed bucket $j_b$, protocol phase $\phi$, previous actions $a_{t-1}, d_{t-1}$, and summary histories $H_a, H_d$.
+
+The action space is $A = \{1, ..., 8\}$, representing the frequency channel to transmit on. The reward signal is defined as:
+\[
+r = \beta \times \mathbb{I}[\text{successful transmission}] - \delta \times \mathbb{I}[\text{jammed}] + \eta \times \mathbb{I}[\text{detection}],
+\]
+where $\mathbb{I}[\cdot]$ is the indicator function. Q-values are updated using the standard temporal-difference learning rule with learning rate $\alpha = 0.1$, discount factor $\gamma = 0.9$, and $\epsilon$-greedy exploration ($\epsilon_0 = 0.5$, decay = 0.998, $\epsilon_{\min} = 0.01$).
 
 %======================== 4. Experimental Setup ========================
 \section{Experimental Setup}
-All experiments were conducted on a workstation (Intel i5-10300H, 8\,GB RAM). The codebase comprises three modules: \texttt{core\_sim.py} (simulation engine), \texttt{run\_experiments.py} (experiment orchestration), and \texttt{plot\_results.py} (data processing and visualization). Random seeds fixed for reproducibility.
+
+All simulations were conducted on a personal laptop equipped with an AMD Ryzen 5 5600H CPU and 16 GB RAM. No parallel or GPU acceleration was used. While the defense strategies are intended for deployment in resource-constrained IoT networks, the experiments were run in a simulated environment to evaluate algorithmic performance and comparative trade-offs under controlled conditions.
+
+The modular simulation framework consists of the following components:
+\begin{itemize}
+    \item \texttt{core\_sim.py} – implements the core simulation engine, including network generation, frequency selection, and agent dynamics.
+    \item \texttt{run\_experiments.py} – orchestrates strategy matchups, runs simulation trials, and logs metrics.
+    \item \texttt{plot\_results.py} – performs post-processing and visualizes results through heatmaps, convergence plots, and boxplots.
+\end{itemize}
+
+Random seeds were fixed for all experiments to ensure reproducibility and consistent evaluation of stochastic learning behaviors.
 
 %======================== 5. Results ========================
 \section{Results}
