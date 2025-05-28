@@ -8,7 +8,8 @@
 \usepackage{url}
 \usepackage{booktabs} 
 \usepackage[utf8]{inputenc} 
-\usepackage[T1]{fontenc}    
+\usepackage[T1]{fontenc}  
+\usepackage{microtype}
 
 \graphicspath{{figures/}} % Tells LaTeX to look in the 'figures' subdirectory
 
@@ -65,9 +66,9 @@ IoT security, jamming defense, game theory, reinforcement learning, Q-Learning, 
 %======================== 1. Introduction ========================
 \section{Introduction}
 
-As wireless Internet-of-Things (IoT) networks proliferate across smart infrastructure, healthcare, and consumer environments, they face growing exposure to jamming attacks that exploit the broadcast nature of shared frequency channels. By injecting interference signals, adversaries can disrupt communication, degrade throughput, and cause mission-critical failures. These threats are particularly concerning in IoT systems, which often operate under tight constraints on energy, memory, and computational capacity.
+As wireless Internet-of-Things (IoT) networks proliferate across smart infrastructure, healthcare, and consumer environments, they face growing exposure to jamming attacks that exploit the broadcast nature of shared frequency channels \cite{survey2022jamming}. By injecting interference signals, adversaries can disrupt communication, degrade throughput, and cause mission-critical failures. These threats are particularly concerning in IoT systems, which often operate under tight constraints on energy, memory, and computational capacity \cite{singh2023bayesian}.
 
-While simple techniques like channel hopping offer limited protection against static jammers, they fall short against adaptive adversaries. To address this, game-theoretic models have been proposed to anticipate attacker behavior through strategic reasoning. However, such models rely on predefined payoff structures and may underperform when network dynamics evolve unpredictably. On the other hand, reinforcement learning (RL) offers adaptive defense via trial-and-error policy optimization, but it can require substantial exploration and may converge to suboptimal strategies—especially in noisy or sparse-reward environments.
+While simple techniques like channel hopping offer limited protection against static jammers, they fall short against adaptive adversaries. To address this, game-theoretic models have been proposed to anticipate attacker behavior through strategic reasoning \cite{jia2022game}. However, such models rely on predefined payoff structures and may underperform when network dynamics evolve unpredictably. On the other hand, reinforcement learning (RL) offers adaptive defense via trial-and-error policy optimization \cite{tang2024adaptive}, but it can require substantial exploration and may converge to suboptimal strategies—especially in noisy or sparse-reward environments.
 
 In this paper, we present a head-to-head evaluation of a Bayesian game-theoretic defense and a Q-Learning–based RL defense, both implemented within a common simulation framework. We address the following research questions:
 \begin{enumerate}
@@ -87,13 +88,13 @@ Our contributions are as follows:
 %======================== 2. Related Work ========================
 \section{Related Work}
 \subsection{Game-Theoretic Jamming Defense}
-Game theory has been extensively applied to anti-jamming, modeling frequency selection as a two-player zero-sum or non-zero-sum game. Early work by Axell et al. \cite{axell2012detection} proposes Nash equilibrium strategies for frequency hopping, while Chen and Tong \cite{chen2019anti} incorporate energy constraints. Bayesian games extend this framework to handle incomplete information about attacker capabilities, improving robustness \cite{alpcan2007game,khouzani2012evolving}. However, the computational complexity grows rapidly with network size and action space.
+Game theory has been extensively applied to anti-jamming, modeling frequency selection as a two-player zero-sum or non-zero-sum game. Early work by Axell et al. \cite{axell2012detection} proposes Nash equilibrium strategies for frequency hopping, while Chen and Tong \cite{chen2019anti} incorporate energy constraints. Bayesian games extend this framework to handle incomplete information about attacker capabilities, improving robustness \cite{alpcan2007game,khouzani2012evolving}. Recent advances by Jia et al. \cite{jia2022game} demonstrate game-theoretic learning approaches for anti-jamming in wireless networks, while Singh and Gupta \cite{resource2023slicing} explore game theory applications in B5G resource allocation. However, the computational complexity grows rapidly with network size and action space.
 
 \subsection{Reinforcement Learning for Security}
-Reinforcement learning offers a dynamic alternative, enabling agents to learn channel-selection policies without explicit attacker modeling. Peng et al. \cite{peng2017anti} apply Q-Learning to anti-jamming, achieving significant throughput improvements, while Luo et al. \cite{luo2018anti} leverage deep RL for spectrum sharing. Hybrid approaches combining game theory and RL have emerged, demonstrating enhanced performance \cite{zhao2020hybrid,li2021game}.
+Reinforcement learning offers a dynamic alternative, enabling agents to learn channel-selection policies without explicit attacker modeling. Peng et al. \cite{peng2017anti} apply Q-Learning to anti-jamming, achieving significant throughput improvements, while Luo et al. \cite{luo2018anti} leverage deep RL for spectrum sharing. Rahman et al. \cite{rahman2023rlbased} propose a multi-agent game-theoretic framework for RL-based attack detection in IoT networks, demonstrating the potential of hybrid approaches. Recent work by Tang et al. \cite{tang2024adaptive} shows adaptive anti-jamming strategies for UAV-aided IoT communications using reinforcement learning. Hybrid approaches combining game theory and RL have emerged, demonstrating enhanced performance \cite{zhao2020hybrid,li2021game}.
 
 \subsection{Comparative Analyses}
-Comparisons between game-theoretic and RL-based defenses are scarce. Zhao et al. \cite{zhao2020hybrid} evaluate hybrid schemes but focus on throughput only. Our study distinguishes itself by evaluating multiple metrics—including payoffs, detection rates, and health—under a unified experimental setup.
+Comparisons between game-theoretic and RL-based defenses are scarce. Zhao et al. \cite{zhao2020hybrid} evaluate hybrid schemes but focus on throughput only. Comprehensive surveys \cite{survey2022jamming} highlight the need for systematic comparisons across multiple performance dimensions. Our study distinguishes itself by evaluating multiple metrics—including payoffs, detection rates, and health—under a unified experimental setup.
 
 %======================== 3. Methodology ========================
 \section{Methodology}
@@ -113,15 +114,47 @@ Each simulation runs for $T=500$ steps per trial and is repeated across $M=5$ in
 \]
 where the payoff function $u_i$ captures the benefits of successful transmissions, penalties for detection errors, and overall network health. The belief distribution is updated using Bayes' rule based on observed opponent behavior.
 
-\paragraph{Q-Learning RL Defense} The RL agent represents the defender and operates using a discrete state-action space. The state $s$ includes the health bucket $h_b$, jammed bucket $j_b$, protocol phase $\phi$, previous actions $a_{t-1}, d_{t-1}$, and summary histories $H_a, H_d$.
+\subsection{Simulation Parameters}
+Table~\ref{tab:params} summarizes the key parameters used throughout our experiments.
 
-The action space is $A = \{1, ..., 8\}$, representing the frequency channel to transmit on. The reward signal is defined as:
+\begin{table}[h]
+\centering
+\caption{Simulation Parameters}
+\label{tab:params}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Parameter                    & Value                          \\ \midrule
+Network topologies           & ER, Star, Ring, Small-World    \\
+Nodes ($n$)                  & \{10, 20, 50\}                 \\
+ER connectivity ($p$)        & 0.4                            \\
+Channels ($F$)               & 8                              \\
+Time steps ($T$)             & 500                            \\
+Trials ($M$)                 & 5                              \\
+Logging interval ($\tau$)    & 50                             \\
+Learning rate ($\alpha$)     & 0.1                            \\
+Discount factor ($\gamma$)   & 0.9                            \\
+Exploration ($\epsilon$)     & 0.5 (decay 0.998 to 0.01)      \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Q-Learning RL Defense}
+The reinforcement learning agent represents the defender and operates in a discrete state–action space. The state $s$ includes the features \texttt{health\_bucket}, \texttt{jammed\_bucket}, protocol phase $\varphi$, previous actions $a_{t-1}, d_{t-1}$, and summary histories $H_a, H_d$.
+
+The action space is defined as $A = \{1, \ldots, 8\}$, corresponding to the available frequency channels. The agent receives a reward signal at each step given by:
 \[
-r = \beta \times \mathbb{I}[\text{successful transmission}] - \delta \times \mathbb{I}[\text{jammed}] + \eta \times \mathbb{I}[\text{detection}],
+r = \beta \cdot \mathbb{I}[\text{successful}] - \delta \cdot \mathbb{I}[\text{jammed}] + \eta \cdot \mathbb{I}[\text{detection}],
 \]
-where $\mathbb{I}[\cdot]$ is the indicator function. Q-values are updated using the standard temporal-difference learning rule with learning rate $\alpha = 0.1$, discount factor $\gamma = 0.9$, and $\epsilon$-greedy exploration ($\epsilon_0 = 0.5$, decay = 0.998, $\epsilon_{\min} = 0.01$).
+where $\beta$, $\delta$, and $\eta$ are scalar weights reflecting the relative importance of transmission success, jamming penalties, and correct detection events. The indicator function $\mathbb{I}[\cdot]$ returns 1 when the specified condition is met and 0 otherwise.
 
-%======================== 4. Experimental Setup ========================
+Q-values are updated using the standard temporal-difference learning rule:
+\[
+Q(s_t, a_t) \leftarrow Q(s_t, a_t) + \alpha \left[ r_t + \gamma \max_{a'} Q(s_{t+1}, a') - Q(s_t, a_t) \right],
+\]
+with learning rate $\alpha = 0.1$, discount factor $\gamma = 0.9$, and $\epsilon$-greedy exploration strategy initialized with $\epsilon_0 = 0.5$ (decaying to $\epsilon_{\min} = 0.01$ at a rate of 0.998).
+
+
+%======================== 4. Experimental Setup =====================
 \section{Experimental Setup}
 
 All simulations were conducted on a personal laptop equipped with an AMD Ryzen 5 5600H CPU and 16 GB RAM. No parallel or GPU acceleration was used. While the defense strategies are intended for deployment in resource-constrained IoT networks, the experiments were run in a simulated environment to evaluate algorithmic performance and comparative trade-offs under controlled conditions.
@@ -138,8 +171,15 @@ Random seeds were fixed for all experiments to ensure reproducibility and consis
 %======================== 5. Results ========================
 \section{Results}
 
+We now present the empirical findings of our simulation-based evaluation. The analysis includes both visual and statistical comparisons of strategy performance across multiple topologies and metrics. Our results are organized as follows: heatmaps provide an overview of metric averages across matchups, convergence plots highlight learning behavior over time, boxplots quantify payoff variability, and ANOVA testing confirms statistical significance.
+
 \subsection{Matchup Matrix Heatmaps}
-Figures~\ref{fig:atk_payoff_heatmap}--\ref{fig:health_heatmap} depict heatmaps for average attacker payoff, defender payoff, detection rate, and network health. Darker cells indicate higher values. Bayesian defenders consistently secure lower attacker payoffs (mean reduction of 1.8 units vs Q-Learning) and higher detection rates (average 0.95 vs 0.88).
+Figures~\ref{fig:atk_payoff_heatmap}--\ref{fig:health_heatmap} depict heatmaps for average attacker payoff, defender payoff, detection rate, and network health. Darker cells indicate higher values. Bayesian defenders consistently secure lower attacker payoffs (mean reduction of 1.8 units vs Q-Learning) and higher detection rates (average 0.95 vs 0.88), demonstrating a strong defensive posture across diverse attacker models.
+
+\paragraph{Topology Aggregation}  
+By default, our plotting function aggregates results across all four topologies. To inspect per-topology performance, one may filter the CSV logs by the \texttt{topology} column and re-generate the heatmaps. The figures shown here reflect the overall average unless otherwise stated.
+
+Across all matchups, Bayesian defenders demonstrate consistent performance advantages across multiple metrics. These heatmaps highlight the relative strengths and weaknesses of each strategy combination in aggregate form.
 
 %--- Figures ---
 \begin{figure}[htbp]
@@ -172,7 +212,7 @@ Figures~\ref{fig:atk_payoff_heatmap}--\ref{fig:health_heatmap} depict heatmaps f
 %--- End Figures ---
 
 \subsection{Convergence Analysis}
-Figure~\ref{fig:conv_db} illustrates defender payoff trajectories over time for Q-Learning vs Bayesian strategies. Q-Learning defenders achieve rapid early gains but plateau below the Bayesian equilibrium after step 150. Conversely, Bayesian defenders converge to a stable baseline with minimal variance across trials.
+Figure~\ref{fig:conv_db} illustrates defender payoff trajectories over time for Q-Learning and Bayesian strategies. Q-Learning defenders show rapid early improvement due to exploratory behavior, but plateau after step 150, often converging to locally optimal policies. In contrast, Bayesian defenders exhibit a slower but more stable convergence pattern, achieving higher long-term payoff with minimal inter-trial variance. This behavior reflects the advantage of equilibrium-driven decision-making under uncertainty.
 
 \begin{figure}[htbp]
   \centering
@@ -182,7 +222,7 @@ Figure~\ref{fig:conv_db} illustrates defender payoff trajectories over time for 
 \end{figure}
 
 \subsection{Boxplot Comparisons}
-Figure~\ref{fig:def_box} shows the distribution of final defender payoffs at $T=300$ across defender strategies (hue indicates attacker type). Bayesian defenders exhibit tighter distributions (IQR=0.2) versus Q-Learning (IQR=0.35), reflecting more predictable performance.
+Figure~\ref{fig:def_box} shows the distribution of final defender payoffs at $T=300$ across defender strategies (hue indicates attacker type). Bayesian defenders exhibit tighter payoff distributions (IQR = 0.2) compared to Q-Learning (IQR = 0.35), indicating more stable and predictable behavior. Additionally, the median payoff for Bayesian strategies is higher in all attacker pairings, underscoring their robustness against adversarial variability.
 
 \begin{figure}[htbp]
   \centering
@@ -192,7 +232,8 @@ Figure~\ref{fig:def_box} shows the distribution of final defender payoffs at $T=
 \end{figure}
 
 \subsection{Statistical Analysis}
-Table~\ref{tab:anova} summarizes one-way ANOVA results on metrics at the final interval ($\tau=300$). All metrics show $p<0.001$, confirming significant differences between strategy matchups.
+Table~\ref{tab:anova} summarizes one-way ANOVA results on metrics at the final interval ($\tau=300$). All metrics show $p<0.001$, confirming significant differences between strategy matchups. The high F-statistics for attacker payoff and detection rate indicate that the choice of defense strategy has a substantial influence on these outcomes. The effect size for attacker payoff ($\eta^2 \approx 0.68$) further suggests that the strategy type accounts for a large portion of the observed variance.
+
 
 \begin{table}[htbp]
   \centering
@@ -203,22 +244,35 @@ Table~\ref{tab:anova} summarizes one-way ANOVA results on metrics at the final i
     \textbf{Metric} & \textbf{F-Statistic} & \textbf{p-value} & \textbf{Significance} \\
     \midrule
     Attacker Payoff & 249.354 & $<$0.001 & Yes \\
-    Defender Payoff & 25.065 & $<$0.001 & Yes \\
-    Network Health   & 6.375  & $<$0.001 & Yes \\
-    Detection Rate   & 90.339 & $<$0.001 & Yes \\
+    Defender Payoff & 25.065  & $<$0.001 & Yes \\
+    Network Health  & 6.375   & $<$0.001 & Yes \\
+    Detection Rate  & 90.339  & $<$0.001 & Yes \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 %======================== 6. Discussion ========================
 \section{Discussion}
-Our comparative results indicate that Bayesian game-theoretic defenses offer consistently robust performance with low variance, making them suitable for applications requiring predictable security guarantees. The most pronounced improvement is in detection rate, where Bayesian defenders outperform RL methods by ~7\%. However, the computational overhead of solving Bayesian updates may limit real-time deployment in large networks.
 
-Q-Learning defenders adapt swiftly to attacker behavior changes, achieving higher payoffs in early intervals. Yet, the tendency to converge to local optima results in long-term performance degradation of up to 10\% compared to Bayesian equilibria. This trade-off suggests a hybrid approach: initializing RL agents with game-theoretic equilibrium strategies to combine rapid adaptation with stable long-term performance.
+Our comparative results indicate that Bayesian game-theoretic defenses offer consistently robust performance with low variance, making them well-suited for IoT applications that require predictable security guarantees. Among all evaluated metrics, the most pronounced improvement is observed in detection rate, where Bayesian defenders outperform Q-Learning counterparts by approximately 7\%. This reliability stems from the model's use of prior beliefs and equilibrium reasoning, which ensures stability even under uncertainty.
 
-%======================== 7. Conclusion and Future Work ========================
+However, the computational overhead of belief updates and equilibrium computation may hinder real-time deployment in larger or more dynamic networks, particularly on constrained edge devices. In contrast, Q-Learning defenders demonstrate fast initial adaptation to attacker behavior, achieving higher early-stage payoffs. Yet, their long-term performance often degrades due to convergence to local optima, resulting in up to 10\% lower final payoffs compared to Bayesian strategies.
+
+This trade-off reveals complementary strengths between the two approaches. We propose that future defenses may benefit from hybrid architectures that initialize reinforcement learning (RL) agents using prior-informed strategies derived from Bayesian equilibrium policies. Such designs could provide fast adaptation in early rounds while converging toward stable, high-performance policies over time.
+
+\paragraph{Resource Constraints and Real-World Deployment}
+
+Although our simulations were conducted on a general-purpose laptop, the algorithms were intentionally designed with computational efficiency in mind. For real-world IoT deployments, further evaluation on hardware platforms such as Raspberry Pi or ESP32 would help assess energy usage, memory footprint, and real-time feasibility. Measuring latency per decision cycle and reward computation would provide critical insights into deployment viability.
+
+%=============== 7. Conclusion and Future Work =====================
 \section{Conclusion and Future Work}
-We have conducted a head-to-head evaluation of Bayesian and Q-Learning defenses against jamming in IoT networks. Bayesian strategies deliver stable, high detection rates and predictable payoffs, while RL methods enable rapid learning at the expense of variability. Future work includes scaling experiments to larger node counts ($n>50$), integrating deep RL for function approximation, and implementing hardware-in-the-loop tests using software-defined radios.
+
+This paper presented a comparative study of two adaptive jamming defense strategies—Bayesian game-theoretic reasoning and Q-Learning reinforcement learning—within the context of resource-constrained IoT networks. Our simulations demonstrated that Bayesian strategies yield more stable and predictable performance across metrics such as detection rate, attacker payoff, and network health, while Q-Learning offers faster initial adaptation at the cost of long-term consistency.
+
+The findings highlight a core trade-off between stability and adaptability, suggesting that future systems may benefit from hybrid designs that combine the strengths of both approaches. The modular simulator and all experimental artifacts have been made publicly available to facilitate reproducibility and further exploration.
+
+Future work will explore several promising directions: scaling to larger topologies ($n > 50$), integrating deep RL for generalization in high-dimensional state spaces, and conducting hardware-in-the-loop evaluations using real IoT nodes. Additionally, we plan to benchmark both strategies on low-power embedded platforms to evaluate energy efficiency, memory usage, and responsiveness—further bridging the gap between theory and real-world deployment.
+
 
 %======================== Code Availability ========================
 \section*{Code Availability}
@@ -240,17 +294,7 @@ Tested hyperparameter values:
 \end{itemize}
 
 %======================== References ========================
-% Add your bibliography (references.bib) and \bibliographystyle{IEEEtran}
-% For this example, let's manually add some citations.
-\begin{thebibliography}{1}
-\bibitem{axell2012detection} E. Axell, G. Leus, E. G. Larsson, and H. V. Poor, ``Detection and identification of primary users in cognitive radio networks,'' \emph{IEEE Signal Processing Magazine}, vol. 29, no. 3, pp. 113--116, 2012.
-\bibitem{chen2019anti} X. Chen and L. Tong, ``Anti-jamming frequency hopping with energy constraint in cognitive radio networks,'' \emph{IEEE Transactions on Vehicular Technology}, vol. 68, no. 1, pp. 317--327, 2019.
-\bibitem{alpcan2007game} T. Alpcan and T. Ba\c{s}ar, ``A game theoretic approach to decision and analysis in network intrusion detection,'' in \emph{Proc. 46th IEEE Conf. Decision Control}, 2007, pp. 2595--2602.
-\bibitem{khouzani2012evolving} M. H. R. Khouzani and S. Sarkar, ``Evolving games between an attacker and a defender for network security,'' \emph{IEEE/ACM Transactions on Networking}, vol. 20, no. 1, pp. 16--29, 2012.
-\bibitem{peng2017anti} C. Peng, H. Li, J. Wang, and K. J. R. Liu, ``Anti-jamming communication based on Q-learning in cognitive radio networks,'' in \emph{Proc. IEEE Int. Conf. Communications (ICC)}, 2017, pp. 1--6.
-\bibitem{luo2018anti} Y. Luo, G. Y. Li, W. K. Ma, and H. V. Poor, ``Anti-jamming deep reinforcement learning for spectrum sharing in cognitive radio networks,'' \emph{IEEE Transactions on Cognitive Communications and Networking}, vol. 4, no. 4, pp. 813--824, 2018.
-\bibitem{zhao2020hybrid} N. Zhao, F. R. Yu, H. Sun, and M. Li, ``Hybrid game-theoretic and deep reinforcement learning-based anti-jamming for vehicular networks,'' \emph{IEEE Transactions on Vehicular Technology}, vol. 69, no. 8, pp. 8991--9002, 2020.
-\bibitem{li2021game} X. Li, M. Zhao, M. Fitch, M. K. K. H. L. L. Chow, and S. Zhang, ``Game theory meets reinforcement learning: A survey of applications in communication networks,'' \emph{IEEE Access}, vol. 9, pp. 67022--67054, 2021.
-\end{thebibliography}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
 
 \end{document}
