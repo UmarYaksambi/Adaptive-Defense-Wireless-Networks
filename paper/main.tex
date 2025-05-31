@@ -10,8 +10,9 @@
 \usepackage[utf8]{inputenc} 
 \usepackage[T1]{fontenc}  
 \usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
 
-\graphicspath{{figures/}} 
+\graphicspath{{figures/}} % Tells LaTeX to look in the 'figures' subdirectory
 
 \begin{document}
 
@@ -24,7 +25,7 @@
     Dept. of CSE (Data Sciences)\\
     RV College Of Engineering\\
     Bengaluru, India\\
-    Email: umaryaksambi@gmail.com
+    Email: mumaryaksambi.cd23@rvce.edu.in
   }
   \and
   \IEEEauthorblockN{Anuj Devpura}
@@ -32,7 +33,7 @@
     Dept. of CSE (Data Sciences)\\
     RV College Of Engineering\\
     Bengaluru, India\\
-    Email: anujdevpura2004@gmail.com
+    Email: anujdevpura.cd23@rvce.edu.in
   }
   \and
   \IEEEauthorblockN{Sadashiv Todakar}
@@ -40,7 +41,7 @@
     Dept. of CSE (Data Sciences)\\
     RV College Of Engineering\\
     Bengaluru, India\\
-    Email: sadashivtodakar@gmail.com
+    Email: sadashivtodakar.cd23@rvce.edu.in
   }
 }
 
@@ -50,7 +51,7 @@
 \begin{abstract}
 This paper presents a comparative analysis of two adaptive defense strategies against jamming in wireless Internet-of-Things (IoT) networks: a Bayesian game-theoretic framework and a Q-Learning–based reinforcement learning (RL) approach. Designed for resource-constrained IoT environments, both strategies are evaluated for their effectiveness in mitigating jamming attacks.
 
-Simulations are conducted on Erd\H{o}s–R\'enyi network topologies ($n = 10$, $p = 0.4$) over 300 time steps and five independent trials. Key performance metrics include attacker and defender payoffs, detection rate, and overall network health. Matchup matrices, convergence curves, and statistical validation via ANOVA ($p < 0.001$) are used to assess performance across strategy combinations.
+Simulations are conducted on Erd\H{o}s–R\'enyi network topologies ($n = 10$, $p = 0.4$) over 500 time steps and five independent trials. Key performance metrics include attacker and defender payoffs, detection rate, and overall network health. Matchup matrices, convergence curves, and statistical validation via ANOVA ($p < 0.001$) are used to assess performance across strategy combinations.
 
 Results show that Bayesian defenders outperform Q-Learning counterparts with a 7.3\% higher detection rate, a 10.2\% lower attacker payoff, and a 5.9\% improvement in network health on average. While Q-Learning enables faster early adaptation, it exhibits greater variability and a tendency to converge to suboptimal policies.
 
@@ -225,7 +226,7 @@ Figure~\ref{fig:conv_db} illustrates defender payoff trajectories over time for 
 \end{figure}
 
 \subsection{Boxplot Comparisons}
-Figure~\ref{fig:def_box} shows the distribution of final defender payoffs at $T=300$ across defender strategies (hue indicates attacker type). Bayesian defenders exhibit tighter payoff distributions (IQR = 0.2) compared to Q-Learning (IQR = 0.35), indicating more stable and predictable behavior. Additionally, the median payoff for Bayesian strategies is higher in all attacker pairings, underscoring their robustness against adversarial variability~\cite{zeng2023comparison}.
+Figure~\ref{fig:def_box} shows the distribution of final defender payoffs at $T=500$ across defender strategies (hue indicates attacker type). Bayesian defenders exhibit tighter payoff distributions (IQR = 0.2) compared to Q-Learning (IQR = 0.35), indicating more stable and predictable behavior. Additionally, the median payoff for Bayesian strategies is higher in all attacker pairings, underscoring their robustness against adversarial variability~\cite{zeng2023comparison}.
 
 \begin{figure}[htbp]
   \centering
@@ -235,7 +236,7 @@ Figure~\ref{fig:def_box} shows the distribution of final defender payoffs at $T=
 \end{figure}
 
 \subsection{Statistical Analysis}
-Table~\ref{tab:anova} summarizes one-way ANOVA results on metrics at the final interval ($\tau=300$). All metrics show $p<0.001$, confirming significant differences between strategy matchups. The high F-statistics for attacker payoff and detection rate indicate that the choice of defense strategy has a substantial influence on these outcomes. The effect size for attacker payoff ($\eta^2 \approx 0.68$) further suggests that the strategy type accounts for a large portion of the observed variance.
+Table~\ref{tab:anova} summarizes one-way ANOVA results on metrics at the final interval ($\tau=500$). All metrics show $p<0.001$, confirming significant differences between strategy matchups. The high F-statistics for attacker payoff and detection rate indicate that the choice of defense strategy has a substantial influence on these outcomes. The effect size for attacker payoff ($\eta^2 \approx 0.68$) further suggests that the strategy type accounts for a large portion of the observed variance.
 
 \begin{table}[htbp]
   \centering
@@ -277,12 +278,93 @@ Future work will explore several promising directions: scaling to larger topolog
 
 %======================== Code Availability ========================
 \section*{Code Availability}
-The full code, including \texttt{core\_sim.py}, \texttt{run\_experiments.py}, and \texttt{plot\_results.py}, is available at:\\
-\url{https://github.com/UmarYaksambi/Adaptive-Defense-Wireless-Networks}. Detailed instructions for replication and dataset generation are provided.
+The full code, including \texttt{core\_sim.py}, \texttt{run\_experiments.py}, and \texttt{plot\_results.py}, is available at our \href{https://github.com/UmarYaksambi/Adaptive-Defense-Wireless-Networks}{GitHub Repository}.
+
+Detailed instructions for replication and dataset generation are provided.
 
 %======================== Appendix ========================
 \appendix
 \section{Additional Figures}
+The following supplementary figures provide further insight into the experimental results and analysis discussed in the main text.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_atk_convergence.pdf}
+    \caption{Attacker payoff convergence (all matchups or aggregated).}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_atk_convergence_Bayesian_Game_vs_Bayesian_Game.pdf}
+    \caption{Attacker payoff convergence: Bayesian Game vs Bayesian Game.}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_atk_convergence_Bayesian_Game_vs_Q_Learning.pdf}
+    \caption{Attacker payoff convergence: Bayesian Game vs Q-Learning.}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_atk_payoff_stdev_boxplot.pdf}
+    \caption{Standard deviation of attacker payoff (boxplot).}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_collision_count_over_time.pdf}
+    \caption{Collision count over time.}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_def_convergence.pdf}
+    \caption{Defender payoff convergence (all matchups or aggregated).}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_def_payoff_stdev_boxplot.pdf}
+    \caption{Standard deviation of defender payoff (boxplot).}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_detection_events_over_time.pdf}
+    \caption{Detection events over time.}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_detection_variance_histogram.pdf}
+    \caption{Histogram of detection rate variance.}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_entropy_atk_Q_learning.pdf}
+    \caption{Entropy of attacker strategies (Q-Learning).}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_entropy_def_Q_learning.pdf}
+    \caption{Entropy of defender strategies (Q-Learning).}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_freq_def_QL_vs_Bayes.pdf}
+    \caption{Defender strategy/channel usage frequency (Q-Learning vs Bayesian).}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/appendix/fig_health_variance_histogram.pdf}
+    \caption{Histogram of network health variance.}
+\end{figure}
+
 All supplementary heatmaps (frequency usage distributions and self-play convergence variants) are included in the online repository due to space constraints.
 
 \section{Hyperparameter Grid}
@@ -291,7 +373,7 @@ Tested hyperparameter values:
   \item Learning rate $\alpha \in \{0.01,0.05,0.1\}$
   \item Discount factor $\gamma \in \{0.8,0.9,0.99\}$
   \item Exploration $\epsilon_{0}=0.5$, decay $\{0.995,0.998\}$, $\epsilon_{\min}=0.01$
-  \item Trials $M=5$, steps $T=300$, logging interval $\tau=50$
+  \item Trials $M=5$, steps $T=500$, logging interval $\tau=50$
 \end{itemize}
 
 %======================== References ========================
