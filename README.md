@@ -183,4 +183,10 @@ Each simulation:
 
 All figures are exported in PDF format for inclusion in LaTeX papers.
 
+---
 
+<p align="center">
+  <strong>Built with ❤️ make wireless security research more reproducible.</strong><br><br>
+  <a href="https://github.com/UmarYaksambi/Adaptive-Defense-Wireless-Networks.git">GitHub</a> •
+  <a href="https://buymeacoffee.com/UmarYaksambi">Buy Me Coffee</a>
+</p>
