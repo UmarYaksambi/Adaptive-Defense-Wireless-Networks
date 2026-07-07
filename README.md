@@ -199,7 +199,8 @@ While this repository focuses on **large-scale, reproducible experiments for the
 ---
 
 <p align="center">
-  <strong>Built with ❤️ make wireless security research more reproducible.</strong><br><br>
-  <a href="https://github.com/UmarYaksambi/Adaptive-Defense-Wireless-Networks.git">GitHub</a> •
-  <a href="https://buymeacoffee.com/UmarYaksambi">Buy Me Coffee</a>
+  <strong>Built with ❤️ to make wireless security research more reproducible.</strong><br><br>
+  <a href="https://github.com/UmarYaksambi/Adaptive-Defense-Wireless-Networks">Research Repository</a> •
+  <a href="https://github.com/UmarYaksambi/Wireless-Network-Security-Enhancement-Using-Game-Theory">Interactive Simulator</a> •
+  <a href="https://buymeacoffee.com/UmarYaksambi">Buy Me a Coffee</a>
 </p>
