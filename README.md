@@ -185,6 +185,19 @@ All figures are exported in PDF format for inclusion in LaTeX papers.
 
 ---
 
+## 📚 Related Repository
+
+Looking for an interactive demonstration?
+
+👉 **Wireless Network Security Enhancement Using Game Theory**
+https://github.com/UmarYaksambi/Wireless-Network-Security-Enhancement-Using-Game-Theory
+
+This companion repository provides a **Streamlit-based interactive simulator** that allows users to explore game-theoretic wireless security models, visualize network topologies, and experiment with different attack and defense strategies in real time.
+
+While this repository focuses on **large-scale, reproducible experiments for the accompanying research paper**, the companion project emphasizes **interactive learning and visualization**.
+
+---
+
 <p align="center">
   <strong>Built with ❤️ make wireless security research more reproducible.</strong><br><br>
   <a href="https://github.com/UmarYaksambi/Adaptive-Defense-Wireless-Networks.git">GitHub</a> •
